@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Acquisition Pipeline · Brea, CA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #F7F5F0;
+    --surface: #FFFFFF;
+    --surface2: #F0EDE6;
+    --border: #E2DDD4;
+    --border-strong: #C8C2B5;
+    --text: #1A1714;
+    --text-muted: #6B6560;
+    --text-faint: #A09B94;
+    --accent: #2C5F3F;
+    --accent-light: #EBF2ED;
+    --accent-text: #1A3D27;
+    --amber: #8A5C1A;
+    --amber-light: #FBF3E4;
+    --red: #8C2A2A;
+    --red-light: #FBE9E9;
+    --radius: 10px;
+    --radius-lg: 14px;
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 15px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── Layout ── */
+  .shell { max-width: 860px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  /* ── Header ── */
+  .header { margin-bottom: 40px; }
+  .header-top { display: flex; align-items: baseline; gap: 16px; margin-bottom: 6px; }
+  .wordmark { font-family: 'DM Serif Display', serif; font-size: 28px; letter-spacing: -0.3px; }
+  .wordmark em { font-style: italic; color: var(--accent); }
+  .location-tag { font-size: 12px; color: var(--text-faint); letter-spacing: 0.05em; text-transform: uppercase; border: 1px solid var(--border); padding: 3px 10px; border-radius: 99px; }
+  .header-sub { font-size: 13px; color: var(--text-muted); }
+
+  /* ── Stats ── */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 32px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+  .stat-label { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+  .stat-value { font-size: 24px; font-weight: 500; line-height: 1.1; }
+  .stat-value.green { color: var(--accent); }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 28px; gap: 0; }
+  .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; padding: 10px 18px; font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--text-muted); cursor: pointer; margin-bottom: -1px; transition: color 0.15s; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--text); border-bottom-color: var(--text); font-weight: 500; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── Forms ── */
+  .field-label { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; font-weight: 500; }
+  input[type="text"], textarea, select {
+    width: 100%;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.15s;
+    -webkit-appearance: none;
+  }
+  input[type="text"]:focus, textarea:focus, select:focus { border-color: var(--accent); }
+  textarea { resize: vertical; }
+
+  /* ── Buttons ── */
+  .btn { display: inline-flex; align-items: center; gap: 7px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; padding: 9px 18px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; transition: background 0.12s, border-color 0.12s; }
+  .btn:hover { background: var(--surface2); border-color: var(--border-strong); }
+  .btn-primary { background: var(--text); color: #fff; border-color: var(--text); }
+  .btn-primary:hover { background: #333; border-color: #333; }
+  .btn-danger { color: var(--red); border-color: transparent; background: none; padding: 6px 10px; }
+  .btn-danger:hover { background: var(--red-light); border-color: transparent; }
+  .btn-sm { font-size: 12px; padding: 5px 12px; }
+
+  /* ── API key banner ── */
+  .api-banner { background: #FBF3E4; border: 1px solid #E8D5A8; border-radius: var(--radius); padding: 14px 16px; margin-bottom: 24px; display: flex; align-items: flex-start; gap: 12px; }
+  .api-banner-icon { font-size: 18px; margin-top: 1px; }
+  .api-banner p { font-size: 13px; color: #5A4010; line-height: 1.6; }
+  .api-banner a { color: #7A5A10; font-weight: 500; }
+  .api-key-row { display: flex; gap: 8px; margin-top: 10px; }
+  .api-key-row input { flex: 1; font-size: 13px; padding: 7px 10px; }
+
+  /* ── Analyze tab ── */
+  .analyze-intro { font-size: 14px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.7; }
+  .ai-result { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; font-size: 14px; line-height: 1.8; white-space: pre-wrap; margin-top: 16px; display: none; color: var(--text); }
+  .ai-result.loading { color: var(--text-muted); font-style: italic; }
+  .save-row { display: none; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .save-row input { max-width: 300px; }
+  .btn-row { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+
+  /* ── Score badge ── */
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 99px; font-size: 12px; font-weight: 500; }
+  .badge-hot { background: var(--accent-light); color: var(--accent-text); }
+  .badge-warm { background: var(--amber-light); color: var(--amber); }
+  .badge-cold { background: var(--red-light); color: var(--red); }
+
+  /* ── Lead cards ── */
+  .lead-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 20px; margin-bottom: 12px; transition: border-color 0.15s; }
+  .lead-card:hover { border-color: var(--border-strong); }
+  .lead-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .lead-name { font-weight: 500; font-size: 16px; font-family: 'DM Serif Display', serif; }
+  .lead-meta { font-size: 12px; color: var(--text-faint); margin-top: 2px; }
+  details summary { font-size: 13px; color: var(--text-muted); cursor: pointer; padding: 6px 0; }
+  details summary:hover { color: var(--text); }
+  .lead-analysis { font-size: 13px; line-height: 1.8; margin-top: 10px; white-space: pre-wrap; color: var(--text); border-top: 1px solid var(--border); padding-top: 12px; }
+
+  /* ── Leads toolbar ── */
+  .leads-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 12px; flex-wrap: wrap; }
+  .leads-toolbar select { width: auto; padding: 7px 12px; font-size: 13px; }
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--text-faint); }
+  .empty-state p { font-size: 15px; margin-bottom: 8px; }
+  .empty-state small { font-size: 13px; }
+
+  /* ── Criteria ── */
+  .criteria-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .criteria-field { display: flex; flex-direction: column; gap: 6px; }
+
+  /* ── Checklist ── */
+  .checklist-section { margin-bottom: 24px; }
+  .checklist-section-title { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .checklist-item { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--bg); font-size: 14px; cursor: pointer; }
+  .checklist-item input[type="checkbox"] { width: 16px; height: 16px; flex-shrink: 0; cursor: pointer; accent-color: var(--accent); }
+  .checklist-item span { color: var(--text); }
+  .checklist-item.done span { color: var(--text-faint); text-decoration: line-through; }
+  .checklist-progress { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; }
+  .progress-bar-track { height: 4px; background: var(--border); border-radius: 99px; margin-top: 6px; }
+  .progress-bar-fill { height: 4px; background: var(--accent); border-radius: 99px; transition: width 0.3s; }
+
+  /* ── Spinner ── */
+  .spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid var(--border); border-top-color: var(--text-muted); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: -2px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Sources strip ── */
+  .sources { display: flex; gap: 10px; margin-bottom: 28px; flex-wrap: wrap; }
+  .source-chip { font-size: 12px; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); padding: 4px 12px; border-radius: 99px; text-decoration: none; transition: border-color 0.12s; }
+  .source-chip:hover { border-color: var(--border-strong); color: var(--text); }
+
+  @media (max-width: 600px) {
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+    .criteria-grid { grid-template-columns: 1fr; }
+    .wordmark { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="header">
+    <div class="header-top">
+      <h1 class="wordmark">Acquisition <em>Scout</em></h1>
+      <span class="location-tag">Brea, CA · SoCal</span>
+    </div>
+    <p class="header-sub">Track, score, and analyze SMB acquisition targets with AI</p>
+  </header>
+
+  <!-- Quick links to listing sources -->
+  <div class="sources">
+    <span style="font-size:12px; color:var(--text-faint); padding: 4px 0; align-self:center;">Browse listings →</span>
+    <a class="source-chip" href="https://www.bizbuysell.com/california/brea-businesses-for-sale/" target="_blank">BizBuySell · Brea</a>
+    <a class="source-chip" href="https://www.bizquest.com/business-for-sale/california/los-angeles/" target="_blank">BizQuest · SoCal</a>
+    <a class="source-chip" href="https://www.loopnet.com/california/brea/businesses-for-sale/" target="_blank">LoopNet · Brea</a>
+    <a class="source-chip" href="https://www.franchisegator.com/listings/resale/?state=CA" target="_blank">Franchise resales</a>
+  </div>
+
+  <!-- Stats row -->
+  <div class="stats-row">
+    <div class="stat-card"><div class="stat-label">Leads tracked</div><div class="stat-value" id="stat-total">0</div></div>
+    <div class="stat-card"><div class="stat-label">Hot prospects</div><div class="stat-value green" id="stat-hot">0</div></div>
+    <div class="stat-card"><div class="stat-label">Avg score</div><div class="stat-value" id="stat-avg">—</div></div>
+    <div class="stat-card"><div class="stat-label">Checklist done</div><div class="stat-value" id="stat-checklist">—</div></div>
+  </div>
+
+  <!-- API Key banner -->
+  <div class="api-banner" id="api-banner">
+    <div class="api-banner-icon">🔑</div>
+    <div>
+      <p><strong>Enter your Anthropic API key</strong> to enable AI analysis. Your key is stored only in this browser (localStorage) and never sent anywhere except Anthropic's API.<br>
+      Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a> — a few dollars of credit covers hundreds of analyses.</p>
+      <div class="api-key-row">
+        <input type="password" id="api-key-input" placeholder="sk-ant-..." autocomplete="off" />
+        <button class="btn btn-primary btn-sm" onclick="saveApiKey()">Save key</button>
+        <button class="btn btn-sm" onclick="clearApiKey()" id="clear-key-btn" style="display:none;">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('analyze')">AI analyzer</button>
+    <button class="tab-btn" onclick="switchTab('leads')">My leads</button>
+    <button class="tab-btn" onclick="switchTab('criteria')">Search criteria</button>
+    <button class="tab-btn" onclick="switchTab('checklist')">Due diligence</button>
+  </div>
+
+  <!-- ── ANALYZE ── -->
+  <div id="tab-analyze" class="tab-panel active">
+    <p class="analyze-intro">Paste a business listing, broker email, or any details you've found. The AI scores it 1–10 against your criteria and surfaces strengths, red flags, and next steps.</p>
+    <div style="margin-bottom: 16px;">
+      <div class="field-label">Business details</div>
+      <textarea id="biz-input" rows="8" placeholder="Paste listing here — name, industry, asking price, annual revenue, SDE/EBITDA, location, years in operation, reason for sale, employee count, lease details..."></textarea>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="analyzeBusiness()"><span id="analyze-spinner" style="display:none;" class="spinner"></span> Analyze this business</button>
+      <button class="btn" onclick="clearAnalysis()">Clear</button>
+    </div>
+    <div id="ai-result" class="ai-result"></div>
+    <div class="save-row" id="save-row">
+      <input type="text" id="save-name" placeholder="Business name (for pipeline)" style="max-width:280px;" />
+      <button class="btn" onclick="saveLead()">&#43; Save to pipeline</button>
+    </div>
+  </div>
+
+  <!-- ── LEADS ── -->
+  <div id="tab-leads" class="tab-panel">
+    <div class="leads-toolbar">
+      <span style="font-size:14px; color:var(--text-muted);">Businesses you've saved and scored</span>
+      <select id="sort-select" onchange="renderLeads()">
+        <option value="date">Newest first</option>
+        <option value="score-desc">Highest score</option>
+        <option value="score-asc">Lowest score</option>
+      </select>
+    </div>
+    <div id="leads-list"></div>
+  </div>
+
+  <!-- ── CRITERIA ── -->
+  <div id="tab-criteria" class="tab-panel">
+    <p style="font-size:14px; color:var(--text-muted); margin-bottom:24px;">These parameters are passed to the AI every time you analyze a business. Update them and the scoring adjusts automatically.</p>
+    <div class="criteria-grid">
+      <div class="criteria-field"><div class="field-label">Max asking price</div><input type="text" id="crit-price" value="$500,000" /></div>
+      <div class="criteria-field"><div class="field-label">Min annual revenue</div><input type="text" id="crit-revenue" value="$200,000" /></div>
+      <div class="criteria-field"><div class="field-label">Min net profit margin</div><input type="text" id="crit-margin" value="15%" /></div>
+      <div class="criteria-field"><div class="field-label">Max distance from Brea, CA</div><input type="text" id="crit-distance" value="30 miles" /></div>
+      <div class="criteria-field"><div class="field-label">Preferred industries</div><input type="text" id="crit-industries" value="Janitorial, Services, B2B, Facilities" /></div>
+      <div class="criteria-field"><div class="field-label">Ownership model</div>
+        <select id="crit-model">
+          <option selected>Absentee / semi-absentee</option>
+          <option>Owner-operator</option>
+          <option>Either</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-bottom:16px;">
+      <div class="field-label">Deal-breakers (must NOT have)</div>
+      <textarea id="crit-dealbreakers" rows="3" placeholder="e.g. Requires specialized license I don't have, highly seasonal revenue, single customer > 30% of revenue, requires physical presence daily..."></textarea>
+    </div>
+    <div style="margin-bottom:20px;">
+      <div class="field-label">Financing & acquisition context</div>
+      <textarea id="crit-notes" rows="4">Financing with SBA 7(a) loan. Targeting DSCR > 1.25x. Want existing staff in place — absentee or semi-absentee operation preferred. Prefer 5+ years in operation. Have existing Chase private client banking relationship for SBA pre-approval.</textarea>
+    </div>
+    <button class="btn btn-primary" onclick="saveCriteria()">Save criteria</button>
+    <span id="crit-saved" style="display:none; font-size:13px; color:var(--accent); margin-left:12px;">✓ Saved</span>
+  </div>
+
+  <!-- ── CHECKLIST ── -->
+  <div id="tab-checklist" class="tab-panel">
+    <p style="font-size:14px; color:var(--text-muted); margin-bottom:6px;">Standard due diligence for SMB acquisition. Check off items as you progress on a deal. Progress is saved automatically.</p>
+    <div class="checklist-progress">
+      <span id="checklist-progress-text">0 of 0 complete</span>
+      <div class="progress-bar-track"><div class="progress-bar-fill" id="checklist-bar" style="width:0%"></div></div>
+    </div>
+    <div id="checklist-container"></div>
+    <button class="btn btn-sm" onclick="resetChecklist()" style="margin-top:8px; color:var(--text-muted);">Reset all</button>
+  </div>
+
+</div><!-- /shell -->
+
+<script>
+// ── DATA ──────────────────────────────────────────────────────────
+const CHECKLIST_DEF = {
+  "Financials": [
+    "3 years of tax returns (business)",
+    "P&L statements (3 years, monthly)",
+    "Balance sheets (3 years)",
+    "Cash flow statements",
+    "Accounts receivable / payable aging reports",
+    "SDE / EBITDA calculation independently verified"
+  ],
+  "Operations": [
+    "Employee roster — key personnel identified",
+    "Customer concentration analysis (< 20% single customer)",
+    "Supplier / vendor contracts reviewed",
+    "Equipment list and condition assessed",
+    "Lease terms and transferability confirmed",
+    "All licenses and permits transferable"
+  ],
+  "Legal": [
+    "Entity formation documents reviewed",
+    "Pending or threatened litigation check",
+    "IP / trademark / brand ownership confirmed",
+    "Non-compete agreement from seller drafted",
+    "UCC lien search completed"
+  ],
+  "SBA / Financing": [
+    "SBA 7(a) pre-approval obtained",
+    "Independent business valuation completed",
+    "Debt service coverage ratio ≥ 1.25x confirmed",
+    "Chase private client SBA contact engaged",
+    "Seller financing terms negotiated (if applicable)"
+  ],
+  "Market & Growth": [
+    "Local competitor landscape mapped",
+    "Google / Yelp reviews and reputation analyzed",
+    "Revenue trend verified (growing / flat / declining)",
+    "Reason for sale independently verified",
+    "Post-acquisition growth thesis documented",
+    "Transition / training period agreed with seller"
+  ]
+};
+
+let leads = [];
+let checkState = {};
+let criteria = {};
+let currentAnalysis = '';
+let currentScore = null;
+
+// ── STORAGE ──────────────────────────────────────────────────────
+function load() {
+  try {
+    leads = JSON.parse(localStorage.getItem('acq_leads') || '[]');
+    checkState = JSON.parse(localStorage.getItem('acq_checks') || '{}');
+    criteria = JSON.parse(localStorage.getItem('acq_criteria') || '{}');
+    const apiKey = localStorage.getItem('acq_api_key') || '';
+    if (apiKey) {
+      document.getElementById('api-key-input').value = apiKey;
+      document.getElementById('clear-key-btn').style.display = '';
+    }
+    // Apply saved criteria
+    if (criteria.price) document.getElementById('crit-price').value = criteria.price;
+    if (criteria.revenue) document.getElementById('crit-revenue').value = criteria.revenue;
+    if (criteria.margin) document.getElementById('crit-margin').value = criteria.margin;
+    if (criteria.distance) document.getElementById('crit-distance').value = criteria.distance;
+    if (criteria.industries) document.getElementById('crit-industries').value = criteria.industries;
+    if (criteria.model) document.getElementById('crit-model').value = criteria.model;
+    if (criteria.dealbreakers) document.getElementById('crit-dealbreakers').value = criteria.dealbreakers;
+    if (criteria.notes) document.getElementById('crit-notes').value = criteria.notes;
+  } catch(e) {}
+}
+
+function persist() {
+  localStorage.setItem('acq_leads', JSON.stringify(leads));
+  localStorage.setItem('acq_checks', JSON.stringify(checkState));
+}
+
+// ── API KEY ───────────────────────────────────────────────────────
+function saveApiKey() {
+  const key = document.getElementById('api-key-input').value.trim();
+  if (!key.startsWith('sk-ant-')) { alert('That doesn\'t look like an Anthropic API key (should start with sk-ant-).'); return; }
+  localStorage.setItem('acq_api_key', key);
+  document.getElementById('clear-key-btn').style.display = '';
+  alert('API key saved. You\'re ready to analyze businesses.');
+}
+function clearApiKey() {
+  localStorage.removeItem('acq_api_key');
+  document.getElementById('api-key-input').value = '';
+  document.getElementById('clear-key-btn').style.display = 'none';
+}
+
+// ── CRITERIA ─────────────────────────────────────────────────────
+function saveCriteria() {
+  criteria = {
+    price: document.getElementById('crit-price').value,
+    revenue: document.getElementById('crit-revenue').value,
+    margin: document.getElementById('crit-margin').value,
+    distance: document.getElementById('crit-distance').value,
+    industries: document.getElementById('crit-industries').value,
+    model: document.getElementById('crit-model').value,
+    dealbreakers: document.getElementById('crit-dealbreakers').value,
+    notes: document.getElementById('crit-notes').value,
+  };
+  localStorage.setItem('acq_criteria', JSON.stringify(criteria));
+  const saved = document.getElementById('crit-saved');
+  saved.style.display = 'inline';
+  setTimeout(() => { saved.style.display = 'none'; }, 2500);
+}
+
+function getCriteria() {
+  return {
+    price: document.getElementById('crit-price').value,
+    revenue: document.getElementById('crit-revenue').value,
+    margin: document.getElementById('crit-margin').value,
+    distance: document.getElementById('crit-distance').value,
+    industries: document.getElementById('crit-industries').value,
+    model: document.getElementById('crit-model').value,
+    dealbreakers: document.getElementById('crit-dealbreakers').value,
+    notes: document.getElementById('crit-notes').value,
+  };
+}
+
+// ── ANALYZE ──────────────────────────────────────────────────────
+async function analyzeBusiness() {
+  const input = document.getElementById('biz-input').value.trim();
+  if (!input) { alert('Paste some business details first.'); return; }
+
+  const apiKey = localStorage.getItem('acq_api_key') || '';
+  if (!apiKey) { alert('Enter your Anthropic API key in the banner above first.'); return; }
+
+  const resultEl = document.getElementById('ai-result');
+  const saveRow = document.getElementById('save-row');
+  const spinner = document.getElementById('analyze-spinner');
+
+  resultEl.style.display = 'block';
+  resultEl.classList.add('loading');
+  resultEl.textContent = 'Analyzing against your criteria…';
+  saveRow.style.display = 'none';
+  spinner.style.display = 'inline-block';
+  currentAnalysis = '';
+  currentScore = null;
+
+  const c = getCriteria();
+  const prompt = `You are an expert SMB acquisition advisor helping a buyer near Brea, CA evaluate a business to acquire.
+
+BUYER CRITERIA:
+- Max asking price: ${c.price}
+- Min annual revenue: ${c.revenue}
+- Min net profit margin: ${c.margin}
+- Max distance from Brea, CA: ${c.distance}
+- Preferred industries: ${c.industries}
+- Ownership model preference: ${c.model}
+- Deal-breakers: ${c.dealbreakers || 'none specified'}
+- Financing & context: ${c.notes}
+
+BUSINESS LISTING:
+${input}
+
+Provide a structured analysis in this exact format:
+
+SCORE: [number 1-10]
+
+SUMMARY
+2 sentences covering what this business is and whether it's worth pursuing.
+
+STRENGTHS
+• [point]
+• [point]
+• [point]
+
+CONCERNS & RED FLAGS
+• [point]
+• [point]
+• [point]
+
+CRITERIA FIT
+Asking price: [Pass / Fail / Unknown — one sentence]
+Revenue: [Pass / Fail / Unknown — one sentence]
+Location: [Pass / Fail / Unknown — one sentence]
+Industry: [Pass / Fail / Unknown — one sentence]
+Ownership model: [Pass / Fail / Unknown — one sentence]
+SBA / DSCR: [Pass / Fail / Unknown — one sentence]
+
+NEXT STEPS
+1. [Specific action]
+2. [Specific action]
+3. [Specific action]
+
+Be direct and skeptical. Flag anything that could kill the deal. A score of 7+ means pursue seriously, 5-6 means investigate further, below 5 means likely pass.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || `API error ${res.status}`);
+    }
+
+    const data = await res.json();
+    const text = data.content?.[0]?.text || 'No response received.';
+    currentAnalysis = text;
+    resultEl.classList.remove('loading');
+    resultEl.textContent = text;
+
+    const scoreMatch = text.match(/SCORE:\s*(\d+(?:\.\d+)?)/i);
+    if (scoreMatch) currentScore = parseFloat(scoreMatch[1]);
+
+    saveRow.style.display = 'flex';
+  } catch (e) {
+    resultEl.classList.remove('loading');
+    resultEl.textContent = 'Error: ' + e.message + '\n\nCheck that your API key is correct and has available credit.';
+  } finally {
+    spinner.style.display = 'none';
+  }
+}
+
+function clearAnalysis() {
+  document.getElementById('biz-input').value = '';
+  const r = document.getElementById('ai-result');
+  r.style.display = 'none';
+  r.textContent = '';
+  document.getElementById('save-row').style.display = 'none';
+  currentAnalysis = '';
+  currentScore = null;
+}
+
+// ── LEADS ────────────────────────────────────────────────────────
+function saveLead() {
+  const name = document.getElementById('save-name').value.trim() || 'Unnamed business';
+  leads.push({
+    id: Date.now(),
+    name,
+    analysis: currentAnalysis,
+    score: currentScore,
+    listing: document.getElementById('biz-input').value.trim(),
+    date: new Date().toISOString()
+  });
+  persist();
+  renderLeads();
+  updateStats();
+  document.getElementById('save-name').value = '';
+  clearAnalysis();
+  switchTab('leads');
+}
+
+function removeLead(id) {
+  if (!confirm('Remove this lead from your pipeline?')) return;
+  leads = leads.filter(l => l.id !== id);
+  persist();
+  renderLeads();
+  updateStats();
+}
+
+function renderLeads() {
+  const container = document.getElementById('leads-list');
+  if (!leads.length) {
+    container.innerHTML = `<div class="empty-state"><p>No leads yet</p><small>Analyze a business on the AI analyzer tab and save it here to start tracking.</small></div>`;
+    return;
+  }
+
+  const sort = document.getElementById('sort-select').value;
+  const sorted = [...leads].sort((a, b) => {
+    if (sort === 'score-desc') return (b.score || 0) - (a.score || 0);
+    if (sort === 'score-asc') return (a.score || 0) - (b.score || 0);
+    return new Date(b.date) - new Date(a.date);
+  });
+
+  container.innerHTML = sorted.map(l => {
+    const scoreClass = l.score >= 7 ? 'badge-hot' : l.score >= 5 ? 'badge-warm' : 'badge-cold';
+    const scoreLabel = l.score >= 7 ? '🔥 Hot' : l.score >= 5 ? '🌤 Warm' : '❄️ Pass';
+    const dateStr = new Date(l.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return `<div class="lead-card">
+      <div class="lead-header">
+        <div>
+          <div class="lead-name">${escHtml(l.name)}</div>
+          <div class="lead-meta">Added ${dateStr}</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          ${l.score ? `<span class="badge ${scoreClass}">${scoreLabel} · ${l.score}/10</span>` : ''}
+          <button class="btn btn-danger btn-sm" onclick="removeLead(${l.id})" title="Remove">✕</button>
+        </div>
+      </div>
+      <details>
+        <summary>View full analysis</summary>
+        <div class="lead-analysis">${escHtml(l.analysis)}</div>
+      </details>
+    </div>`;
+  }).join('');
+}
+
+function escHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── CHECKLIST ────────────────────────────────────────────────────
+function renderChecklist() {
+  const container = document.getElementById('checklist-container');
+  let html = '';
+  let total = 0, done = 0;
+  for (const [section, items] of Object.entries(CHECKLIST_DEF)) {
+    html += `<div class="checklist-section"><div class="checklist-section-title">${section}</div>`;
+    items.forEach((item, i) => {
+      const key = section + '__' + i;
+      const checked = !!checkState[key];
+      total++;
+      if (checked) done++;
+      html += `<label class="checklist-item ${checked ? 'done' : ''}">
+        <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleCheck('${key}', this)" />
+        <span>${item}</span>
+      </label>`;
+    });
+    html += '</div>';
+  }
+  container.innerHTML = html;
+  document.getElementById('checklist-progress-text').textContent = `${done} of ${total} complete`;
+  document.getElementById('checklist-bar').style.width = total ? Math.round((done/total)*100) + '%' : '0%';
+  document.getElementById('stat-checklist').textContent = total ? Math.round((done/total)*100) + '%' : '—';
+}
+
+function toggleCheck(key, el) {
+  checkState[key] = el.checked;
+  persist();
+  renderChecklist();
+}
+
+function resetChecklist() {
+  if (!confirm('Reset all checklist items?')) return;
+  checkState = {};
+  persist();
+  renderChecklist();
+}
+
+// ── STATS ─────────────────────────────────────────────────────────
+function updateStats() {
+  document.getElementById('stat-total').textContent = leads.length;
+  const hot = leads.filter(l => l.score >= 7).length;
+  document.getElementById('stat-hot').textContent = hot;
+  const scored = leads.filter(l => l.score != null);
+  const avg = scored.length ? (scored.reduce((s,l) => s+l.score, 0) / scored.length).toFixed(1) : '—';
+  document.getElementById('stat-avg').textContent = avg;
+}
+
+// ── TABS ──────────────────────────────────────────────────────────
+function switchTab(id) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const tabs = ['analyze','leads','criteria','checklist'];
+  document.querySelectorAll('.tab-btn')[tabs.indexOf(id)]?.classList.add('active');
+  document.getElementById('tab-' + id)?.classList.add('active');
+}
+
+// ── INIT ──────────────────────────────────────────────────────────
+load();
+renderLeads();
+renderChecklist();
+updateStats();
+</script>
+</body>
+</html>
