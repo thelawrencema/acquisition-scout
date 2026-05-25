@@ -55,7 +55,7 @@ function callClaude(prompt) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
+      max_tokens: 8192,
       messages: [{ role: 'user', content: prompt }]
     });
     const req = https.request({
@@ -85,18 +85,36 @@ function callClaude(prompt) {
   });
 }
 
+function extractJsonArray(raw) {
+  // Find the outermost [...] block
+  const start = raw.indexOf('[');
+  const end = raw.lastIndexOf(']');
+  if (start === -1 || end === -1) throw new Error('No JSON array found in response.');
+  let jsonStr = raw.slice(start, end + 1);
+  try {
+    return JSON.parse(jsonStr);
+  } catch {
+    // Salvage: truncate to last complete object before the parse failure
+    const lastClose = jsonStr.lastIndexOf('},');
+    if (lastClose === -1) throw new Error('Could not parse Claude response as JSON. Try again.');
+    jsonStr = jsonStr.slice(0, lastClose + 1) + ']';
+    return JSON.parse(jsonStr);
+  }
+}
+
 function buildPrompt(pageText, criteria) {
-  return `You are an expert SMB acquisition broker. A buyer near Brea, CA wants to acquire a business. Using the page text below, extract every business listing you can find and evaluate each one against the buyer's criteria.
+  return `You are an expert SMB acquisition broker. A buyer near Brea, CA wants to acquire a business. Using the content below — which may be plain page text or raw HTML source from BizBuySell, BusinessBroker.net, BusinessMart.com, or similar sites — extract every business listing you can find and evaluate each one against the buyer's criteria. Deduplicate listings that appear more than once. If the input is HTML, extract the full listing URL from href attributes on listing title links (e.g. href="/business-for-sale/..." or href="https://www.bizbuysell.com/business-for-sale/...") and include the complete absolute URL in the url field.
 
 BUYER CRITERIA:
-- Max asking price: ${criteria.price || '$500,000'}
+- Max asking price: ${criteria.price || '$750,000'}
+- Min SDE / Cash Flow: ${criteria.sde || '$100,000'} — listings below this MUST be scored <= 3
 - Min annual revenue: ${criteria.revenue || '$200,000'}
 - Min net profit margin: ${criteria.margin || '15%'}
-- Max distance from Brea, CA: ${criteria.distance || '30 miles'}
+- Target area: ${criteria.distance || 'Brea, Chino Hills, Diamond Bar, Rowland Heights, La Habra, Placentia, Fullerton, Yorba Linda and surrounding cities within ~25 miles of Brea CA'}
 - Preferred industries: ${criteria.industries || 'Janitorial, Services, B2B, Facilities'}
-- Ownership model: ${criteria.model || 'Absentee / semi-absentee'}
+- Ownership model: ${criteria.model || 'Absentee / semi-absentee'} — absentee/semi-absentee gets a score bonus; owner-operator gets a penalty
 - Deal-breakers: ${criteria.dealbreakers || 'none specified'}
-- Financing context: ${criteria.notes || 'SBA 7(a) loan, targeting DSCR > 1.25x, prefer 5+ years in operation'}
+- Financing context: ${criteria.notes || 'SBA 7(a) loan, max $750k, need $100k+ SDE, DSCR > 1.25x, prefer 5+ years in operation'}
 
 PAGE TEXT:
 ${pageText.slice(0, 40000)}
@@ -119,7 +137,8 @@ Return ONLY a valid JSON array — no markdown, no explanation, just raw JSON. E
 }
 
 score = 1-10 integer. priority = "contact now" (>=7), "investigate" (5-6), "pass" (<=4).
-Sort by score descending. Include all listings found, even poor fits.`;
+Sort by score descending. Include all listings found, even poor fits.
+IMPORTANT: All string values must be valid JSON — do not use unescaped double quotes, backslashes, or newlines inside strings.`;
 }
 
 async function getListings(criteria) {
@@ -127,8 +146,9 @@ async function getListings(criteria) {
     console.log('Using cached BizBuySell content');
   } else {
     const urls = [
+      'https://www.bizbuysell.com/businesses-for-sale/?q=Brea%2C+CA+92821&radius=25',
+      'https://www.bizbuysell.com/california/orange-county-businesses-for-sale/',
       'https://www.bizbuysell.com/california/brea-businesses-for-sale/',
-      'https://www.bizbuysell.com/businesses-for-sale/?q=Brea%2C+CA&radius=30',
     ];
     for (const url of urls) {
       try {
@@ -148,16 +168,12 @@ async function getListings(criteria) {
   }
 
   const raw = await callClaude(buildPrompt(bzsCache, criteria));
-  const match = raw.match(/\[[\s\S]*\]/);
-  if (!match) throw new Error('Unexpected response format from Claude. Try again.');
-  return JSON.parse(match[0]);
+  return extractJsonArray(raw);
 }
 
 async function analyzePassedText(pageText, criteria) {
   const raw = await callClaude(buildPrompt(pageText, criteria));
-  const match = raw.match(/\[[\s\S]*\]/);
-  if (!match) throw new Error('Unexpected response format from Claude. Try again.');
-  return JSON.parse(match[0]);
+  return extractJsonArray(raw);
 }
 
 function parseBody(req) {

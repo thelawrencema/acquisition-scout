@@ -267,9 +267,8 @@
       </div>
       <div class="header-actions">
         <span class="timestamp" id="listings-timestamp">Not yet loaded</span>
-        <button class="btn btn-primary btn-sm" onclick="refreshListings(true)" id="refresh-btn">
-          <span id="refresh-spinner" class="spinner" style="display:none;"></span>
-          Refresh listings
+        <button class="btn btn-primary btn-sm" onclick="document.getElementById('paste-details').open=true; document.getElementById('paste-panel').scrollIntoView({behavior:'smooth'});">
+          Import listings
         </button>
       </div>
     </div>
@@ -302,10 +301,11 @@
     <div class="panel-body">
       <p style="font-size:13px; color:var(--text-muted); margin-bottom:20px;">Criteria are used when you click "Refresh listings" — the AI scores every listing against these parameters.</p>
       <div class="criteria-grid">
-        <div class="criteria-field"><div class="field-label">Max asking price</div><input type="text" id="crit-price" value="$500,000" /></div>
+        <div class="criteria-field"><div class="field-label">Max asking price</div><input type="text" id="crit-price" value="$750,000" /></div>
+        <div class="criteria-field"><div class="field-label">Min SDE / Cash Flow</div><input type="text" id="crit-sde" value="$100,000" /></div>
         <div class="criteria-field"><div class="field-label">Min annual revenue</div><input type="text" id="crit-revenue" value="$200,000" /></div>
         <div class="criteria-field"><div class="field-label">Min net profit margin</div><input type="text" id="crit-margin" value="15%" /></div>
-        <div class="criteria-field"><div class="field-label">Max distance from Brea, CA</div><input type="text" id="crit-distance" value="30 miles" /></div>
+        <div class="criteria-field"><div class="field-label">Target cities</div><input type="text" id="crit-distance" value="Brea, Chino Hills, Diamond Bar, Rowland Heights, La Habra, Placentia, Fullerton, Yorba Linda (~25 mi radius)" /></div>
         <div class="criteria-field"><div class="field-label">Preferred industries</div><input type="text" id="crit-industries" value="Janitorial, Services, B2B, Facilities" /></div>
         <div class="criteria-field"><div class="field-label">Ownership model</div>
           <select id="crit-model">
@@ -321,7 +321,7 @@
       </div>
       <div style="margin-bottom:20px;">
         <div class="field-label">Financing &amp; acquisition context</div>
-        <textarea id="crit-notes" rows="3">Financing with SBA 7(a) loan. Targeting DSCR > 1.25x. Want existing staff in place — absentee or semi-absentee preferred. Prefer 5+ years in operation. Have existing Chase private client banking relationship for SBA pre-approval.</textarea>
+        <textarea id="crit-notes" rows="3">Financing with SBA 7(a) loan. Max purchase price $750,000. Need minimum $100k SDE/cash flow. Targeting DSCR > 1.25x. Absentee or semi-absentee strongly preferred. Prefer 5+ years in operation. Have existing Chase private client banking relationship for SBA pre-approval.</textarea>
       </div>
       <div style="display:flex; gap:10px; align-items:center;">
         <button class="btn btn-primary btn-sm" onclick="saveCriteria()">Save criteria</button>
@@ -331,52 +331,81 @@
     </div>
   </details>
 
-  <!-- ── Broker listings ── -->
-  <div class="section-heading">
-    <div>
-      <div class="section-title">Top acquisition targets</div>
-      <div class="section-sub">Ranked by AI broker score · refreshed from BizBuySell</div>
-    </div>
-  </div>
-
-  <div id="listings-state">
-    <div class="state-box">
-      <p>No listings loaded yet</p>
-      <small>Click below to fetch current listings from BizBuySell and get an expert broker analysis.</small>
-      <br>
-      <button class="btn btn-primary" onclick="refreshListings(true)">Load listings now</button>
-    </div>
-  </div>
-  <div id="listings-container"></div>
-
-  <!-- Manual paste fallback (shown when auto-fetch is blocked) -->
-  <div id="paste-panel" style="display:none;">
+  <!-- ── Import panel (always visible) ── -->
+  <div id="paste-panel">
     <details class="panel" id="paste-details" open>
       <summary>
-        <div class="panel-summary-left"><span>Paste listings from BizBuySell</span><span class="panel-count">manual import</span></div>
+        <div class="panel-summary-left"><span>Import listings from BizBuySell</span><span class="panel-count" id="batch-badge">0 searches added</span></div>
         <span class="panel-chevron">›</span>
       </summary>
       <div class="panel-body">
-        <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px; line-height:1.7;">
-          BizBuySell is blocking automated requests. Instead:
-          <strong>1.</strong> Open <a href="https://www.bizbuysell.com/california/brea-businesses-for-sale/" target="_blank">BizBuySell · Brea</a> in your browser &nbsp;
-          <strong>2.</strong> Select all text on the page (Ctrl+A) and copy it (Ctrl+C) &nbsp;
-          <strong>3.</strong> Paste it below and click Analyze.
+        <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px; line-height:1.7;">
+          To get exact listing links: press <strong>Ctrl+U</strong> on the search page to open its HTML source, then Ctrl+A → Ctrl+C → paste below. For a quicker import without links, just Ctrl+A → Ctrl+C directly on the page.
         </p>
-        <div style="margin-bottom:12px;">
-          <div class="field-label">Pasted page content</div>
-          <textarea id="paste-input" rows="8" placeholder="Paste the full BizBuySell page text here (Ctrl+A then Ctrl+C on the BizBuySell page)..."></textarea>
+
+        <div style="margin-bottom:16px;">
+          <div class="field-label" style="margin-bottom:8px;">Step 1 — open a search, press Ctrl+U (page source), Ctrl+A → Ctrl+C → paste → click "Add"</div>
+
+          <div style="font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px; margin-top:10px;">BizBuySell</div>
+          <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+            <a class="source-chip" href="https://www.bizbuysell.com/california/orange-county-businesses-for-sale/" target="_blank">OC — Brea, Fullerton, Placentia, Yorba Linda, La Habra</a>
+            <a class="source-chip" href="https://www.bizbuysell.com/california/los-angeles-county-businesses-for-sale/" target="_blank">LA County — Diamond Bar, Rowland Heights</a>
+            <a class="source-chip" href="https://www.bizbuysell.com/california/san-bernardino-county-businesses-for-sale/" target="_blank">SBD County — Chino Hills, Chino</a>
+          </div>
+
+          <div style="font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">BusinessBroker.net</div>
+          <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+            <a class="source-chip" href="https://www.businessbroker.net/california/orange-county-businesses-for-sale.aspx" target="_blank" rel="noreferrer noopener">Orange County</a>
+            <a class="source-chip" href="https://www.businessbroker.net/california/los-angeles-county-businesses-for-sale.aspx" target="_blank" rel="noreferrer noopener">LA County</a>
+            <a class="source-chip" href="https://www.businessbroker.net/california/san-bernardino-county-businesses-for-sale.aspx" target="_blank" rel="noreferrer noopener">San Bernardino County</a>
+          </div>
+
+          <div style="font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">BusinessMart.com</div>
+          <div style="display:flex; flex-wrap:wrap; gap:8px;">
+            <a class="source-chip" href="https://www.businessmart.com/businesses-for-sale/california/orange-county.php" target="_blank">Orange County</a>
+            <a class="source-chip" href="https://www.businessmart.com/businesses-for-sale/california/los-angeles.php" target="_blank">LA County</a>
+            <a class="source-chip" href="https://www.businessmart.com/businesses-for-sale/california/san-bernardino-county.php" target="_blank">San Bernardino County</a>
+          </div>
         </div>
-        <div style="display:flex; gap:10px; align-items:center;">
-          <button class="btn btn-primary" onclick="analyzePaste()">
-            <span id="paste-spinner" class="spinner" style="display:none;"></span>
-            Analyze listings
-          </button>
+
+        <div style="margin-bottom:12px;">
+          <div class="field-label">Paste page content here</div>
+          <textarea id="paste-input" rows="6" placeholder="Go to one of the searches above → Ctrl+A → Ctrl+C → Ctrl+V here, then click Add to batch..."></textarea>
+        </div>
+
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px;">
+          <button class="btn" onclick="addToBatch()">+ Add to batch</button>
+          <button class="btn btn-sm" onclick="clearBatch()" style="color:var(--text-muted);">Clear batch</button>
           <span id="paste-char-count" style="font-size:12px; color:var(--text-faint);"></span>
         </div>
+
+        <div id="batch-list" style="margin-bottom:16px; display:none;">
+          <div class="field-label" style="margin-bottom:8px;">Batch ready to analyze</div>
+          <div id="batch-items" style="display:flex; flex-direction:column; gap:6px;"></div>
+        </div>
+
+        <button class="btn btn-primary" onclick="analyzePaste()" id="analyze-batch-btn" disabled>
+          <span id="paste-spinner" class="spinner" style="display:none;"></span>
+          Analyze all batched listings
+        </button>
       </div>
     </details>
   </div>
+
+  <!-- ── Broker listings ── -->
+  <div class="section-heading" style="margin-top:28px;">
+    <div>
+      <div class="section-title">Top acquisition targets</div>
+      <div class="section-sub">Ranked by AI broker score</div>
+    </div>
+  </div>
+  <div id="listings-state">
+    <div class="state-box">
+      <p>No listings imported yet</p>
+      <small>Use the import panel above to paste listings from BizBuySell.</small>
+    </div>
+  </div>
+  <div id="listings-container"></div>
 
   <!-- ── Manual analyzer ── -->
   <details class="panel" id="analyze-panel">
@@ -503,6 +532,7 @@ function load() {
     criteria = JSON.parse(localStorage.getItem('acq_criteria') || '{}');
 
     if (criteria.price) document.getElementById('crit-price').value = criteria.price;
+    if (criteria.sde) document.getElementById('crit-sde').value = criteria.sde;
     if (criteria.revenue) document.getElementById('crit-revenue').value = criteria.revenue;
     if (criteria.margin) document.getElementById('crit-margin').value = criteria.margin;
     if (criteria.distance) document.getElementById('crit-distance').value = criteria.distance;
@@ -530,6 +560,7 @@ function persist() {
 function saveCriteria() {
   criteria = {
     price: document.getElementById('crit-price').value,
+    sde: document.getElementById('crit-sde').value,
     revenue: document.getElementById('crit-revenue').value,
     margin: document.getElementById('crit-margin').value,
     distance: document.getElementById('crit-distance').value,
@@ -547,6 +578,7 @@ function saveCriteria() {
 function getCriteria() {
   return {
     price: document.getElementById('crit-price').value,
+    sde: document.getElementById('crit-sde').value,
     revenue: document.getElementById('crit-revenue').value,
     margin: document.getElementById('crit-margin').value,
     distance: document.getElementById('crit-distance').value,
@@ -558,64 +590,71 @@ function getCriteria() {
 }
 
 // ── LISTINGS (broker feed) ────────────────────────────────────────
-async function refreshListings(force = false) {
-  const btn = document.getElementById('refresh-btn');
-  const spinner = document.getElementById('refresh-spinner');
-  const stateEl = document.getElementById('listings-state');
 
-  btn.disabled = true;
-  spinner.style.display = 'inline-block';
-  stateEl.innerHTML = `<div class="state-box"><p>Fetching listings from BizBuySell and running broker analysis…</p><small>This takes 15–30 seconds on first load.</small></div>`;
-  stateEl.style.display = '';
-  document.getElementById('listings-container').innerHTML = '';
-  document.getElementById('paste-panel').style.display = 'none';
+let batchTexts = [];
 
-  try {
-    const res = await fetch('/api/listings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(getCriteria())
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      if (data.blocked) {
-        stateEl.innerHTML = `<div class="state-box error-box"><p>BizBuySell is blocking automated requests</p><small>Use the manual paste option below — it takes 30 seconds and works every time.</small></div>`;
-        document.getElementById('paste-panel').style.display = '';
-        return;
-      }
-      throw new Error(data.error || `Server error ${res.status}`);
-    }
+function addToBatch() {
+  const text = document.getElementById('paste-input').value.trim();
+  if (!text) { alert('Paste some text first.'); return; }
+  batchTexts.push(text);
+  document.getElementById('paste-input').value = '';
+  document.getElementById('paste-char-count').textContent = '';
+  updateBatchUI();
+}
 
-    currentListings = data.listings;
-    localStorage.setItem('acq_listings', JSON.stringify({ listings: data.listings, updatedAt: data.updatedAt }));
-    renderListings(data.listings, data.updatedAt);
-  } catch(e) {
-    stateEl.innerHTML = `<div class="state-box error-box"><p>Could not load listings</p><small>${escHtml(e.message)}</small><br><button class="btn btn-sm" style="margin-top:12px;" onclick="refreshListings(true)">Try again</button></div>`;
-  } finally {
-    btn.disabled = false;
-    spinner.style.display = 'none';
+function clearBatch() {
+  batchTexts = [];
+  document.getElementById('paste-input').value = '';
+  document.getElementById('paste-char-count').textContent = '';
+  updateBatchUI();
+}
+
+function updateBatchUI() {
+  const count = batchTexts.length;
+  const totalChars = batchTexts.reduce((s, t) => s + t.length, 0);
+  document.getElementById('batch-badge').textContent = count + (count === 1 ? ' search added' : ' searches added');
+  document.getElementById('analyze-batch-btn').disabled = count === 0;
+
+  const listEl = document.getElementById('batch-list');
+  const itemsEl = document.getElementById('batch-items');
+  if (count === 0) {
+    listEl.style.display = 'none';
+    return;
   }
+  listEl.style.display = '';
+  itemsEl.innerHTML = batchTexts.map((t, i) =>
+    `<div style="display:flex; align-items:center; justify-content:space-between; font-size:13px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:8px 12px;">
+      <span style="color:var(--text-muted);">Search ${i + 1} — ${t.length.toLocaleString()} chars</span>
+      <button class="btn btn-danger btn-sm" onclick="removeBatchItem(${i})">✕</button>
+    </div>`
+  ).join('');
+  itemsEl.innerHTML += `<div style="font-size:12px; color:var(--text-faint); padding:4px 2px;">${totalChars.toLocaleString()} total chars across ${count} search${count > 1 ? 'es' : ''}</div>`;
+}
+
+function removeBatchItem(i) {
+  batchTexts.splice(i, 1);
+  updateBatchUI();
 }
 
 async function analyzePaste() {
-  const text = document.getElementById('paste-input').value.trim();
-  if (!text) { alert('Paste the BizBuySell page text first.'); return; }
+  if (!batchTexts.length) { alert('Add at least one search to the batch first.'); return; }
 
-  const btn = document.querySelector('#paste-details .btn-primary');
+  const btn = document.getElementById('analyze-batch-btn');
   const spinner = document.getElementById('paste-spinner');
   const stateEl = document.getElementById('listings-state');
 
   btn.disabled = true;
   spinner.style.display = 'inline-block';
-  stateEl.innerHTML = `<div class="state-box"><p>Analyzing pasted listings…</p><small>Running broker analysis against your criteria.</small></div>`;
+  stateEl.innerHTML = `<div class="state-box"><p>Analyzing ${batchTexts.length} batched search${batchTexts.length > 1 ? 'es' : ''}…</p><small>Running broker analysis against your criteria.</small></div>`;
   stateEl.style.display = '';
   document.getElementById('listings-container').innerHTML = '';
 
   try {
+    const combinedText = batchTexts.join('\n\n--- NEXT SEARCH RESULTS ---\n\n');
     const res = await fetch('/api/analyze-paste', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, criteria: getCriteria() })
+      body: JSON.stringify({ text: combinedText, criteria: getCriteria() })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
@@ -623,8 +662,7 @@ async function analyzePaste() {
     currentListings = data.listings;
     localStorage.setItem('acq_listings', JSON.stringify({ listings: data.listings, updatedAt: data.updatedAt }));
     renderListings(data.listings, data.updatedAt);
-    document.getElementById('paste-panel').style.display = 'none';
-    document.getElementById('paste-input').value = '';
+    clearBatch();
   } catch(e) {
     stateEl.innerHTML = `<div class="state-box error-box"><p>Analysis failed</p><small>${escHtml(e.message)}</small></div>`;
     stateEl.style.display = '';
@@ -659,7 +697,10 @@ function renderListings(listings, updatedAt) {
     const priorityLabel = l.priority === 'contact now' ? '● Contact now' : l.priority === 'investigate' ? '◐ Investigate' : '○ Pass';
     const strengths = (l.strengths || []).map(s => `<span class="tag tag-strength">${escHtml(s)}</span>`).join('');
     const concerns = (l.concerns || []).map(c => `<span class="tag tag-concern">${escHtml(c)}</span>`).join('');
-    const viewLink = l.url ? `<a class="btn btn-sm" href="${escHtml(l.url)}" target="_blank">View listing →</a>` : '';
+    const searchUrl = `https://www.bizbuysell.com/businesses-for-sale/?q=${encodeURIComponent(l.name + ' ' + (l.location || ''))}`;
+    const viewLink = l.url
+      ? `<a class="btn btn-sm" href="${escHtml(l.url)}" target="_blank" rel="noreferrer noopener">View listing →</a>`
+      : `<a class="btn btn-sm" href="${searchUrl}" target="_blank" rel="noreferrer noopener">Search BizBuySell →</a>`;
     return `<div class="listing-card priority-${priorityClass}">
       <div class="listing-card-top">
         <div class="listing-card-meta">
@@ -707,6 +748,7 @@ function saveListingToLeads(index) {
     analysis: `${l.brokerNotes}\n\nAsking: ${l.askingPrice} | Revenue: ${l.annualRevenue} | Cash Flow: ${l.cashFlow}\nLocation: ${l.location}`,
     score: l.score,
     listing: l.description || '',
+    url: l.url || null,
     date: new Date().toISOString()
   });
   persist();
@@ -892,6 +934,7 @@ function renderLeads() {
           <button class="btn btn-danger btn-sm" onclick="removeLead(${l.id})" title="Remove">✕</button>
         </div>
       </div>
+      ${(l.url || l.name) ? `<a href="${escHtml(l.url || `https://www.bizbuysell.com/businesses-for-sale/?q=${encodeURIComponent(l.name)}`)}" target="_blank" rel="noreferrer noopener" style="font-size:12px; color:var(--accent); text-decoration:none; display:inline-block; margin-bottom:6px;">${l.url ? 'View listing →' : 'Search BizBuySell →'}</a>` : ''}
       <details class="lead-detail">
         <summary>View analysis</summary>
         <div class="lead-analysis">${escHtml(l.analysis)}</div>
@@ -975,7 +1018,7 @@ if (sessionStorage.getItem('acq_auth') === '1') {
 
 document.getElementById('paste-input').addEventListener('input', function() {
   const n = this.value.length;
-  document.getElementById('paste-char-count').textContent = n > 0 ? n.toLocaleString() + ' chars pasted' : '';
+  document.getElementById('paste-char-count').textContent = n > 0 ? n.toLocaleString() + ' chars — click Add to batch' : '';
 });
 
 load();
