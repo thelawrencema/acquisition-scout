@@ -43,9 +43,26 @@ async function fetchPageText(url) {
     const page = await browser.newPage();
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await new Promise(r => setTimeout(r, 3000));
-    const text = await page.evaluate(() => document.body.innerText);
-    console.log(`Fetched ${url} — ${text.length} chars`);
-    return text;
+    const result = await page.evaluate(() => {
+      const listingLinks = Array.from(document.querySelectorAll('a[href]'))
+        .filter(a => {
+          const h = a.href;
+          return h.includes('/Business-Opportunity/') ||
+                 h.includes('/business-for-sale/') ||
+                 (/bizbuysell\.com/.test(h) && /\/\d+\/?$/.test(h));
+        })
+        .map(a => ({ href: a.href, text: a.innerText.trim() }))
+        .filter(l => l.text.length > 2);
+
+      const linkSection = listingLinks.length > 0
+        ? 'LISTING DIRECT LINKS (use these as the url field — match by title):\n' +
+          listingLinks.map(l => `URL: ${l.href} | Title: ${l.text}`).join('\n')
+        : '';
+
+      return (linkSection ? linkSection + '\n\n' : '') + 'PAGE TEXT:\n' + document.body.innerText;
+    });
+    console.log(`Fetched ${url} — ${result.length} chars (${result.split('\n').filter(l => l.startsWith('URL:')).length} listing links extracted)`);
+    return result;
   } finally {
     await browser.close();
   }
@@ -103,7 +120,7 @@ function extractJsonArray(raw) {
 }
 
 function buildPrompt(pageText, criteria) {
-  return `You are an expert SMB acquisition broker. A buyer near Brea, CA wants to acquire a business. Using the content below — which may be plain page text or raw HTML source from BizBuySell, BusinessBroker.net, BusinessMart.com, or similar sites — extract every business listing you can find and evaluate each one against the buyer's criteria. Deduplicate listings that appear more than once. If the input is HTML, extract the full listing URL from href attributes on listing title links (e.g. href="/business-for-sale/..." or href="https://www.bizbuysell.com/business-for-sale/...") and include the complete absolute URL in the url field.
+  return `You are an expert SMB acquisition broker. A buyer near Brea, CA wants to acquire a business. Using the content below — extracted from BizBuySell, BusinessBroker.net, BusinessMart.com, or similar sites — extract every business listing you can find and evaluate each one against the buyer's criteria. Deduplicate listings that appear more than once. Where a "LISTING DIRECT LINKS" section is present, match each listing to its URL by title and populate the url field with the full absolute URL.
 
 BUYER CRITERIA:
 - Max asking price: ${criteria.price || '$750,000'}
@@ -171,8 +188,36 @@ async function getListings(criteria) {
   return extractJsonArray(raw);
 }
 
+function preprocessPastedContent(text) {
+  const looksLikeHtml = /^\s*<!DOCTYPE|^\s*<html/i.test(text) || (text.indexOf('<a ') !== -1 && text.indexOf('href=') !== -1);
+  if (!looksLikeHtml) return text;
+
+  const linkRe = /href=["']([^"']*(?:business-opportunity|business-for-sale|businesses\/|listing)[^"']*|\d{5,}\/?)["'][^>]*>([^<]{3,80})/gi;
+  const links = [];
+  let m;
+  while ((m = linkRe.exec(text)) !== null) {
+    const href = m[1].startsWith('http') ? m[1] : `https://www.bizbuysell.com${m[1]}`;
+    const title = m[2].trim();
+    if (title) links.push(`URL: ${href} | Title: ${title}`);
+  }
+
+  const stripped = text
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  const linkSection = links.length > 0
+    ? 'LISTING DIRECT LINKS (use these as the url field — match by title):\n' + links.join('\n')
+    : '';
+
+  return (linkSection ? linkSection + '\n\n' : '') + 'PAGE TEXT:\n' + stripped;
+}
+
 async function analyzePassedText(pageText, criteria) {
-  const raw = await callClaude(buildPrompt(pageText, criteria));
+  const processed = preprocessPastedContent(pageText);
+  const raw = await callClaude(buildPrompt(processed, criteria));
   return extractJsonArray(raw);
 }
 
