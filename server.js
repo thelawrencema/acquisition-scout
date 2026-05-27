@@ -274,6 +274,18 @@ http.createServer(async (req, res) => {
     return;
   }
 
+  // Serve static assets from public/
+  const staticTypes = { '.css': 'text/css', '.js': 'application/javascript' };
+  const ext = path.extname(req.url);
+  if (req.method === 'GET' && staticTypes[ext]) {
+    fs.readFile(path.join(__dirname, 'public', path.basename(req.url)), (err, data) => {
+      if (err) { res.writeHead(404); res.end('Not found'); return; }
+      res.writeHead(200, { 'Content-Type': staticTypes[ext] });
+      res.end(data);
+    });
+    return;
+  }
+
   res.writeHead(404);
   res.end('Not found');
 }).listen(PORT, () => {
