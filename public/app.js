@@ -46,7 +46,6 @@ let criteria = {};
 let currentListings = [];
 let currentAnalysis = '';
 let currentScore = null;
-let batchTexts = [];
 
 // ── Utils ─────────────────────────────────────────────────────────
 function escHtml(s) {
@@ -107,81 +106,107 @@ function saveCriteria() {
   setTimeout(() => { saved.style.display = 'none'; }, 2000);
 }
 
-// ── Batch import ──────────────────────────────────────────────────
-function addToBatch() {
-  const text = document.getElementById('paste-input').value.trim();
-  if (!text) { alert('Paste some text first.'); return; }
-  batchTexts.push(text);
-  document.getElementById('paste-input').value = '';
-  document.getElementById('paste-char-count').textContent = '';
-  updateBatchUI();
-}
-
-function clearBatch() {
-  batchTexts = [];
-  document.getElementById('paste-input').value = '';
-  document.getElementById('paste-char-count').textContent = '';
-  updateBatchUI();
-}
-
-function removeBatchItem(i) {
-  batchTexts.splice(i, 1);
-  updateBatchUI();
-}
-
-function updateBatchUI() {
-  const count = batchTexts.length;
-  const totalChars = batchTexts.reduce((s, t) => s + t.length, 0);
-  document.getElementById('batch-badge').textContent = count + (count === 1 ? ' search added' : ' searches added');
-  document.getElementById('analyze-batch-btn').disabled = count === 0;
-
-  const listEl = document.getElementById('batch-list');
-  const itemsEl = document.getElementById('batch-items');
-  if (count === 0) { listEl.style.display = 'none'; return; }
-
-  listEl.style.display = '';
-  itemsEl.innerHTML = batchTexts.map((t, i) =>
-    `<div style="display:flex; align-items:center; justify-content:space-between; font-size:13px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:8px 12px;">
-      <span style="color:var(--text-muted);">Search ${i + 1} — ${t.length.toLocaleString()} chars</span>
-      <button class="btn btn-danger btn-sm" onclick="removeBatchItem(${i})">✕</button>
-    </div>`
-  ).join('');
-  itemsEl.innerHTML += `<div style="font-size:12px; color:var(--text-faint); padding:4px 2px;">${totalChars.toLocaleString()} total chars across ${count} search${count > 1 ? 'es' : ''}</div>`;
-}
-
-async function analyzePaste() {
-  if (!batchTexts.length) { alert('Add at least one search to the batch first.'); return; }
-
-  const btn = document.getElementById('analyze-batch-btn');
-  const spinner = document.getElementById('paste-spinner');
+// ── Scout ─────────────────────────────────────────────────────────
+async function runScout() {
+  const btn = document.getElementById('scout-btn');
+  const statusPanel = document.getElementById('scout-status');
+  const progressBar = document.getElementById('scout-progress');
+  const searchCount = document.getElementById('scout-search-count');
+  const logEl = document.getElementById('scout-log');
   const stateEl = document.getElementById('listings-state');
 
+  let searches = 0;
+  // Progress advances ~12% per search, capped at 88% until done
+  const EXPECTED_SEARCHES = 7;
+
+  function appendLog(msg, type) {
+    const isSearch = type === 'search';
+    const entry = document.createElement('div');
+    entry.style.cssText = `font-size:12px; padding:2px 0; color:${isSearch ? 'var(--accent)' : 'var(--text-muted)'}; display:flex; align-items:baseline; gap:6px;`;
+    entry.innerHTML = `<span style="flex-shrink:0; color:var(--text-faint);">${isSearch ? '⌕' : '·'}</span><span>${escHtml(msg)}</span>`;
+    logEl.prepend(entry);
+  }
+
+  function setProgress(pct) {
+    progressBar.style.width = Math.min(pct, 100) + '%';
+  }
+
   btn.disabled = true;
-  spinner.style.display = 'inline-block';
-  stateEl.innerHTML = `<div class="state-box"><p>Analyzing ${batchTexts.length} batched search${batchTexts.length > 1 ? 'es' : ''}…</p><small>Running broker analysis against your criteria.</small></div>`;
+  logEl.innerHTML = '';
+  searches = 0;
+  statusPanel.style.display = '';
+  searchCount.textContent = '0 searches';
+  setProgress(4);
+  appendLog('Starting acquisition scout…', 'info');
+
+  stateEl.innerHTML = `<div class="state-box"><p>Scout is searching…</p><small>Browsing BizBuySell, BizQuest, and BusinessBroker.net</small></div>`;
   stateEl.style.display = '';
   document.getElementById('listings-container').innerHTML = '';
 
   try {
-    const combinedText = batchTexts.join('\n\n--- NEXT SEARCH RESULTS ---\n\n');
-    const res = await fetch('/api/analyze-paste', {
+    const res = await fetch('/api/scout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: combinedText, criteria: getCriteria() })
+      body: JSON.stringify({ criteria: getCriteria() })
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
 
-    currentListings = data.listings;
-    localStorage.setItem('acq_listings', JSON.stringify({ listings: data.listings, updatedAt: data.updatedAt }));
-    renderListings(data.listings, data.updatedAt);
-    clearBatch();
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Server error ${res.status}`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const chunks = buffer.split('\n\n');
+      buffer = chunks.pop();
+
+      for (const chunk of chunks) {
+        const eventMatch = chunk.match(/^event: (\w+)/m);
+        const dataMatch = chunk.match(/^data: (.+)/m);
+        if (!eventMatch || !dataMatch) continue;
+
+        const type = eventMatch[1];
+        const data = JSON.parse(dataMatch[1]);
+
+        if (type === 'status') {
+          const isSearch = data.message.startsWith('Searching:');
+          appendLog(data.message, isSearch ? 'search' : 'info');
+          if (isSearch) {
+            searches++;
+            searchCount.textContent = `${searches} search${searches !== 1 ? 'es' : ''}`;
+            setProgress(4 + (searches / EXPECTED_SEARCHES) * 84);
+          } else if (data.message.startsWith('Parsing')) {
+            setProgress(92);
+          }
+        } else if (type === 'done') {
+          setProgress(100);
+          appendLog(`Done — ${data.listings.length} listings found`, 'info');
+          currentListings = data.listings;
+          localStorage.setItem('acq_listings', JSON.stringify({ listings: data.listings, updatedAt: data.updatedAt }));
+          // Small delay so user sees 100% before panel hides
+          setTimeout(() => {
+            statusPanel.style.display = 'none';
+            renderListings(data.listings, data.updatedAt);
+          }, 600);
+        } else if (type === 'error') {
+          throw new Error(data.error);
+        }
+      }
+    }
   } catch (e) {
-    stateEl.innerHTML = `<div class="state-box error-box"><p>Analysis failed</p><small>${escHtml(e.message)}</small></div>`;
+    stateEl.innerHTML = `<div class="state-box error-box"><p>Scout failed</p><small>${escHtml(e.message)}</small></div>`;
     stateEl.style.display = '';
+    appendLog('Scout failed: ' + e.message, 'info');
+    setTimeout(() => { statusPanel.style.display = 'none'; }, 2000);
   } finally {
     btn.disabled = false;
-    spinner.style.display = 'none';
   }
 }
 
@@ -523,11 +548,6 @@ if (sessionStorage.getItem('acq_auth') === '1') {
 } else {
   setTimeout(() => document.getElementById('gate-pw').focus(), 50);
 }
-
-document.getElementById('paste-input').addEventListener('input', function () {
-  const n = this.value.length;
-  document.getElementById('paste-char-count').textContent = n > 0 ? n.toLocaleString() + ' chars — click Add to batch' : '';
-});
 
 load();
 renderLeads();

@@ -35,8 +35,9 @@
       </div>
       <div class="header-actions">
         <span class="timestamp" id="listings-timestamp">Not yet loaded</span>
-        <button class="btn btn-primary btn-sm" onclick="document.getElementById('paste-details').open=true; document.getElementById('paste-panel').scrollIntoView({behavior:'smooth'});">
-          Import listings
+        <button class="btn btn-primary btn-sm" id="scout-btn" onclick="runScout()">
+          <span class="spinner" id="scout-spinner" style="display:none;"></span>
+          Scout now
         </button>
       </div>
     </div>
@@ -67,7 +68,7 @@
       <span class="panel-chevron">›</span>
     </summary>
     <div class="panel-body">
-      <p style="font-size:13px; color:var(--text-muted); margin-bottom:20px;">Criteria are used when you click "Refresh listings" — the AI scores every listing against these parameters.</p>
+      <p style="font-size:13px; color:var(--text-muted); margin-bottom:20px;">Criteria are passed to the scout — the AI searches and scores listings against these parameters.</p>
       <div class="criteria-grid">
         <div class="criteria-field"><div class="field-label">Max asking price</div><input type="text" id="crit-price" value="$750,000" /></div>
         <div class="criteria-field"><div class="field-label">Min SDE / Cash Flow</div><input type="text" id="crit-sde" value="$100,000" /></div>
@@ -93,71 +94,26 @@
       </div>
       <div style="display:flex; gap:10px; align-items:center;">
         <button class="btn btn-primary btn-sm" onclick="saveCriteria()">Save criteria</button>
-        <button class="btn btn-sm" onclick="saveCriteria(); refreshListings(true);">Save &amp; refresh now</button>
         <span id="crit-saved" style="display:none; font-size:13px; color:var(--accent);">✓ Saved</span>
       </div>
     </div>
   </details>
 
-  <!-- Import panel -->
-  <div id="paste-panel">
-    <details class="panel" id="paste-details" open>
-      <summary>
-        <div class="panel-summary-left"><span>Import listings from BizBuySell</span><span class="panel-count" id="batch-badge">0 searches added</span></div>
-        <span class="panel-chevron">›</span>
-      </summary>
-      <div class="panel-body">
-        <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px; line-height:1.7;">
-          To get exact listing links: press <strong>Ctrl+U</strong> on the search page to open its HTML source, then Ctrl+A → Ctrl+C → paste below. For a quicker import without links, just Ctrl+A → Ctrl+C directly on the page.
-        </p>
-
-        <div style="margin-bottom:16px;">
-          <div class="field-label" style="margin-bottom:8px;">Step 1 — open a search, press Ctrl+U (page source), Ctrl+A → Ctrl+C → paste → click "Add"</div>
-
-          <div style="font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px; margin-top:10px;">BizBuySell</div>
-          <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
-            <a class="source-chip" href="https://www.bizbuysell.com/california/orange-county-businesses-for-sale/" target="_blank">OC — Brea, Fullerton, Placentia, Yorba Linda, La Habra</a>
-            <a class="source-chip" href="https://www.bizbuysell.com/california/los-angeles-county-businesses-for-sale/" target="_blank">LA County — Diamond Bar, Rowland Heights</a>
-            <a class="source-chip" href="https://www.bizbuysell.com/california/san-bernardino-county-businesses-for-sale/" target="_blank">SBD County — Chino Hills, Chino</a>
-          </div>
-
-          <div style="font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">BusinessBroker.net</div>
-          <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
-            <a class="source-chip" href="https://www.businessbroker.net/california/orange-county-businesses-for-sale.aspx" target="_blank" rel="noreferrer noopener">Orange County</a>
-            <a class="source-chip" href="https://www.businessbroker.net/california/los-angeles-county-businesses-for-sale.aspx" target="_blank" rel="noreferrer noopener">LA County</a>
-            <a class="source-chip" href="https://www.businessbroker.net/california/san-bernardino-county-businesses-for-sale.aspx" target="_blank" rel="noreferrer noopener">San Bernardino County</a>
-          </div>
-
-          <div style="font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">BusinessMart.com</div>
-          <div style="display:flex; flex-wrap:wrap; gap:8px;">
-            <a class="source-chip" href="https://www.businessmart.com/businesses-for-sale/california/orange-county.php" target="_blank">Orange County</a>
-            <a class="source-chip" href="https://www.businessmart.com/businesses-for-sale/california/los-angeles.php" target="_blank">LA County</a>
-            <a class="source-chip" href="https://www.businessmart.com/businesses-for-sale/california/san-bernardino-county.php" target="_blank">San Bernardino County</a>
-          </div>
-        </div>
-
-        <div style="margin-bottom:12px;">
-          <div class="field-label">Paste page content here</div>
-          <textarea id="paste-input" rows="6" placeholder="Go to one of the searches above → Ctrl+A → Ctrl+C → Ctrl+V here, then click Add to batch..."></textarea>
-        </div>
-
-        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px;">
-          <button class="btn" onclick="addToBatch()">+ Add to batch</button>
-          <button class="btn btn-sm" onclick="clearBatch()" style="color:var(--text-muted);">Clear batch</button>
-          <span id="paste-char-count" style="font-size:12px; color:var(--text-faint);"></span>
-        </div>
-
-        <div id="batch-list" style="margin-bottom:16px; display:none;">
-          <div class="field-label" style="margin-bottom:8px;">Batch ready to analyze</div>
-          <div id="batch-items" style="display:flex; flex-direction:column; gap:6px;"></div>
-        </div>
-
-        <button class="btn btn-primary" onclick="analyzePaste()" id="analyze-batch-btn" disabled>
-          <span id="paste-spinner" class="spinner" style="display:none;"></span>
-          Analyze all batched listings
-        </button>
+  <!-- Scout status panel -->
+  <div id="scout-status" style="display:none; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); margin-bottom:14px; overflow:hidden;">
+    <div style="padding:13px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
+      <div style="display:flex; align-items:center; gap:9px;">
+        <span class="spinner spinner-dark"></span>
+        <span style="font-size:14px; font-weight:500; color:var(--text);">Scout running</span>
       </div>
-    </details>
+      <span id="scout-search-count" style="font-size:12px; color:var(--text-faint);">0 searches</span>
+    </div>
+    <div style="padding:12px 16px 14px;">
+      <div class="progress-bar-track" style="margin-bottom:11px;">
+        <div class="progress-bar-fill" id="scout-progress" style="width:4%; transition:width 0.5s ease;"></div>
+      </div>
+      <div id="scout-log" style="max-height:150px; overflow-y:auto; display:flex; flex-direction:column-reverse; gap:3px;"></div>
+    </div>
   </div>
 
   <!-- Broker listings -->
@@ -169,8 +125,8 @@
   </div>
   <div id="listings-state">
     <div class="state-box">
-      <p>No listings imported yet</p>
-      <small>Use the import panel above to paste listings from BizBuySell.</small>
+      <p>No listings yet</p>
+      <small>Click "Scout now" to search BizBuySell, BizQuest, and BusinessBroker.net automatically.</small>
     </div>
   </div>
   <div id="listings-container"></div>
