@@ -48,6 +48,7 @@ function callAnthropic(body) {
         } catch (e) { reject(e); }
       });
     });
+    req.setTimeout(120000, () => { req.destroy(new Error('Anthropic API request timed out.')); });
     req.on('error', reject);
     req.write(raw);
     req.end();
@@ -69,11 +70,8 @@ function extractJsonArray(raw) {
   }
 }
 
-function buildScoutPrompt(criteria) {
-  return `You are an expert SMB acquisition broker. Use web search to find business listings for sale that match the buyer criteria below. Search BizBuySell.com, BizQuest.com, and BusinessBroker.net. Perform several targeted searches to find 15-25 listings total across all three sites.
-
-BUYER CRITERIA:
-- Max asking price: ${criteria.price || '$750,000'}
+function buildCriteriaBlock(criteria) {
+  return `- Max asking price: ${criteria.price || '$750,000'}
 - Min SDE / Cash Flow: ${criteria.sde || '$100,000'} — listings below this MUST be scored <= 3
 - Min annual revenue: ${criteria.revenue || '$200,000'}
 - Min net profit margin: ${criteria.margin || '15%'}
@@ -81,14 +79,25 @@ BUYER CRITERIA:
 - Preferred industries: ${criteria.industries || 'No preference — any industry'}
 - Ownership model: ${criteria.model || 'Absentee / semi-absentee'} — absentee/semi-absentee gets a score bonus; owner-operator gets a penalty
 - Deal-breakers: ${criteria.dealbreakers || 'none specified'}
-- Financing context: ${criteria.notes || 'SBA 7(a) loan, max $750k, need $100k+ SDE, DSCR > 1.25x, prefer 5+ years in operation'}
+- Financing context: ${criteria.notes || 'SBA 7(a) loan, max $750k, need $100k+ SDE, DSCR > 1.25x, prefer 5+ years in operation'}`;
+}
+
+function buildScoutPrompt(criteria) {
+  const industrySearch = criteria.industries
+    ? `- "${criteria.industries} business for sale Southern California"`
+    : '- "service business for sale Southern California bizbuysell"';
+
+  return `You are an expert SMB acquisition broker. Use web search to find business listings for sale that match the buyer criteria below. Search BizBuySell.com, BizQuest.com, and BusinessBroker.net. Perform several targeted searches to find 15-25 listings total across all three sites.
+
+BUYER CRITERIA:
+${buildCriteriaBlock(criteria)}
 
 Suggested searches:
 - "businesses for sale Orange County California bizbuysell"
 - "businesses for sale Brea CA bizbuysell"
 - "businesses for sale Chino Hills Diamond Bar CA bizbuysell"
-- "janitorial cleaning service business for sale Southern California"
-- "B2B service business for sale Orange County bizquest"
+${industrySearch}
+- "absentee business for sale Orange County bizquest"
 - "absentee business for sale Southern California businessbroker"
 
 IMPORTANT — asking price, revenue, and cash flow:
@@ -182,15 +191,7 @@ function buildAnalyzePrompt(pageText, criteria) {
   return `You are an expert SMB acquisition broker. A buyer near Brea, CA wants to acquire a business. Using the content below — extracted from BizBuySell, BusinessBroker.net, BusinessMart.com, or similar sites — extract every business listing you can find and evaluate each one against the buyer's criteria. Deduplicate listings that appear more than once. Where a "LISTING DIRECT LINKS" section is present, match each listing to its URL by title and populate the url field with the full absolute URL.
 
 BUYER CRITERIA:
-- Max asking price: ${criteria.price || '$750,000'}
-- Min SDE / Cash Flow: ${criteria.sde || '$100,000'} — listings below this MUST be scored <= 3
-- Min annual revenue: ${criteria.revenue || '$200,000'}
-- Min net profit margin: ${criteria.margin || '15%'}
-- Target area: ${criteria.distance || 'Brea, Chino Hills, Diamond Bar, Rowland Heights, La Habra, Placentia, Fullerton, Yorba Linda and surrounding cities within ~25 miles of Brea CA'}
-- Preferred industries: ${criteria.industries || 'No preference — any industry'}
-- Ownership model: ${criteria.model || 'Absentee / semi-absentee'} — absentee/semi-absentee gets a score bonus; owner-operator gets a penalty
-- Deal-breakers: ${criteria.dealbreakers || 'none specified'}
-- Financing context: ${criteria.notes || 'SBA 7(a) loan, max $750k, need $100k+ SDE, DSCR > 1.25x, prefer 5+ years in operation'}
+${buildCriteriaBlock(criteria)}
 
 PAGE TEXT:
 ${pageText.slice(0, 40000)}

@@ -59,15 +59,9 @@ function load() {
     checkState = JSON.parse(localStorage.getItem('acq_checks') || '{}');
     criteria = JSON.parse(localStorage.getItem('acq_criteria') || '{}');
 
-    if (criteria.price) document.getElementById('crit-price').value = criteria.price;
-    if (criteria.sde) document.getElementById('crit-sde').value = criteria.sde;
-    if (criteria.revenue) document.getElementById('crit-revenue').value = criteria.revenue;
-    if (criteria.margin) document.getElementById('crit-margin').value = criteria.margin;
-    if (criteria.distance) document.getElementById('crit-distance').value = criteria.distance;
-    if (criteria.industries) document.getElementById('crit-industries').value = criteria.industries;
-    if (criteria.model) document.getElementById('crit-model').value = criteria.model;
-    if (criteria.dealbreakers) document.getElementById('crit-dealbreakers').value = criteria.dealbreakers;
-    if (criteria.notes) document.getElementById('crit-notes').value = criteria.notes;
+    ['price','sde','revenue','margin','distance','industries','model','dealbreakers','notes'].forEach(f => {
+      if (f in criteria) document.getElementById('crit-' + f).value = criteria[f];
+    });
 
     const cached = localStorage.getItem('acq_listings');
     if (cached) {
@@ -290,7 +284,6 @@ function saveListingToLeads(index) {
   });
   persist();
   renderLeads();
-  updateStats();
   document.getElementById('pipeline-panel').open = true;
 }
 
@@ -423,7 +416,6 @@ function saveLead() {
   });
   persist();
   renderLeads();
-  updateStats();
   document.getElementById('save-name').value = '';
   clearAnalysis();
   document.getElementById('pipeline-panel').open = true;
@@ -434,7 +426,6 @@ function removeLead(id) {
   leads = leads.filter(l => l.id !== id);
   persist();
   renderLeads();
-  updateStats();
 }
 
 function renderLeads() {
@@ -519,12 +510,6 @@ function resetChecklist() {
   renderChecklist();
 }
 
-// ── Stats ─────────────────────────────────────────────────────────
-function updateStats() {
-  document.getElementById('stat-pipeline').textContent = leads.length;
-  document.getElementById('pipeline-count-badge').textContent = leads.length ? leads.length + ' saved' : '0 saved';
-}
-
 // ── Password gate ─────────────────────────────────────────────────
 function submitGate() {
   const input = document.getElementById('gate-pw');
@@ -552,4 +537,3 @@ if (sessionStorage.getItem('acq_auth') === '1') {
 load();
 renderLeads();
 renderChecklist();
-updateStats();
