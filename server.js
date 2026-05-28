@@ -78,7 +78,7 @@ BUYER CRITERIA:
 - Min annual revenue: ${criteria.revenue || '$200,000'}
 - Min net profit margin: ${criteria.margin || '15%'}
 - Target area: ${criteria.distance || 'Brea, Chino Hills, Diamond Bar, Rowland Heights, La Habra, Placentia, Fullerton, Yorba Linda and surrounding cities within ~25 miles of Brea CA'}
-- Preferred industries: ${criteria.industries || 'Janitorial, Services, B2B, Facilities'}
+- Preferred industries: ${criteria.industries || 'No preference — any industry'}
 - Ownership model: ${criteria.model || 'Absentee / semi-absentee'} — absentee/semi-absentee gets a score bonus; owner-operator gets a penalty
 - Deal-breakers: ${criteria.dealbreakers || 'none specified'}
 - Financing context: ${criteria.notes || 'SBA 7(a) loan, max $750k, need $100k+ SDE, DSCR > 1.25x, prefer 5+ years in operation'}
@@ -90,6 +90,9 @@ Suggested searches:
 - "janitorial cleaning service business for sale Southern California"
 - "B2B service business for sale Orange County bizquest"
 - "absentee business for sale Southern California businessbroker"
+
+IMPORTANT — asking price, revenue, and cash flow:
+Listing sites (BizBuySell, BizQuest, BusinessBroker) always display the asking price on the listing page. If a search snippet does not include the price, open the listing URL directly with another search or fetch the page to get the actual numbers. Only use "Not disclosed" if the listing page itself explicitly says the price is not disclosed or withheld by the seller. Never use "Not disclosed" simply because the snippet was missing the number.
 
 After completing your searches, return ONLY a valid JSON array — no markdown, no explanation. Each element:
 {
@@ -139,8 +142,6 @@ async function runScout(criteria, onStatus) {
       .filter(b => b.type === 'tool_use' && b.name === 'web_search')
       .forEach(b => onStatus(`Searching: "${b.input?.query}"`));
 
-    messages.push({ role: 'assistant', content });
-
     if (response.stop_reason === 'end_turn') {
       const text = content.find(b => b.type === 'text')?.text || '';
       onStatus('Parsing listings…');
@@ -148,14 +149,30 @@ async function runScout(criteria, onStatus) {
     }
 
     if (response.stop_reason === 'tool_use') {
+      messages.push({ role: 'assistant', content });
       // Return tool_results to continue the loop; Anthropic executes web_search server-side
       const toolResults = content
         .filter(b => b.type === 'tool_use')
         .map(b => ({ type: 'tool_result', tool_use_id: b.id, content: '' }));
       if (toolResults.length) {
         messages.push({ role: 'user', content: toolResults });
+      } else {
+        throw new Error('Unexpected: tool_use stop with no tool blocks.');
       }
+      continue;
     }
+
+    if (response.stop_reason === 'max_tokens') {
+      // Model ran out of tokens mid-response — try to salvage partial JSON
+      const text = content.find(b => b.type === 'text')?.text || '';
+      if (text.includes('[')) {
+        onStatus('Parsing partial results…');
+        return extractJsonArray(text);
+      }
+      throw new Error('Scout response was cut off before any listings were returned. Try again.');
+    }
+
+    throw new Error(`Scout stopped unexpectedly (reason: ${response.stop_reason}). Try again.`);
   }
 
   throw new Error('Scout exceeded maximum search iterations. Try again.');
@@ -170,13 +187,15 @@ BUYER CRITERIA:
 - Min annual revenue: ${criteria.revenue || '$200,000'}
 - Min net profit margin: ${criteria.margin || '15%'}
 - Target area: ${criteria.distance || 'Brea, Chino Hills, Diamond Bar, Rowland Heights, La Habra, Placentia, Fullerton, Yorba Linda and surrounding cities within ~25 miles of Brea CA'}
-- Preferred industries: ${criteria.industries || 'Janitorial, Services, B2B, Facilities'}
+- Preferred industries: ${criteria.industries || 'No preference — any industry'}
 - Ownership model: ${criteria.model || 'Absentee / semi-absentee'} — absentee/semi-absentee gets a score bonus; owner-operator gets a penalty
 - Deal-breakers: ${criteria.dealbreakers || 'none specified'}
 - Financing context: ${criteria.notes || 'SBA 7(a) loan, max $750k, need $100k+ SDE, DSCR > 1.25x, prefer 5+ years in operation'}
 
 PAGE TEXT:
 ${pageText.slice(0, 40000)}
+
+IMPORTANT — asking price, revenue, and cash flow: These listing sites always display the asking price. Extract it from the page text. Only use "Not disclosed" if the page itself explicitly says the price is withheld by the seller. Never use "Not disclosed" simply because the number did not appear in the snippet you reviewed.
 
 Return ONLY a valid JSON array — no markdown, no explanation, just raw JSON. Each element:
 {
