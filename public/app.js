@@ -52,6 +52,31 @@ function escHtml(s) {
   return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// Returns true only if the URL points to an individual listing page, not a search/directory page
+function isDirectListingUrl(url) {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    const host = u.hostname.replace('www.', '');
+    if (host === 'bizbuysell.com') {
+      // Listing pages contain /Business-Opportunity/ or end with a numeric ID
+      return /\/Business-Opportunity\//i.test(url) || /\/\d{5,}\/?$/.test(u.pathname);
+    }
+    if (host === 'bizquest.com') {
+      // Listing pages contain a BQ ID
+      return /BQ\d+/i.test(url);
+    }
+    if (host === 'businessbroker.net') {
+      // Listing pages are .aspx files or contain /businessforsale/ with a slug
+      return /\/businessforsale\/.+\d/i.test(url) || /\.aspx/i.test(url);
+    }
+    // For any other domain (broker sites, etc.), trust it
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ── Storage ───────────────────────────────────────────────────────
 function load() {
   try {
@@ -110,14 +135,47 @@ async function runScout() {
   const stateEl = document.getElementById('listings-state');
 
   let searches = 0;
+  let timerInterval = null;
+  let startTime = Date.now();
   // Progress advances ~12% per search, capped at 88% until done
   const EXPECTED_SEARCHES = 7;
 
+  function elapsedStr() {
+    const s = Math.floor((Date.now() - startTime) / 1000);
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+  }
+
   function appendLog(msg, type) {
-    const isSearch = type === 'search';
     const entry = document.createElement('div');
-    entry.style.cssText = `font-size:12px; padding:2px 0; color:${isSearch ? 'var(--accent)' : 'var(--text-muted)'}; display:flex; align-items:baseline; gap:6px;`;
-    entry.innerHTML = `<span style="flex-shrink:0; color:var(--text-faint);">${isSearch ? '⌕' : '·'}</span><span>${escHtml(msg)}</span>`;
+    entry.style.cssText = 'font-size:12px; padding:2px 0; display:flex; align-items:baseline; gap:6px;';
+
+    let icon = '·';
+    let iconColor = 'var(--text-faint)';
+    let html = '';
+
+    if (type === 'search') {
+      icon = '⌕';
+      iconColor = 'var(--accent)';
+      // "Searching BizBuySell — topic" or "Searching — topic"
+      const m = msg.match(/^Searching (BizBuySell|BizQuest|BusinessBroker\.net) — (.+)/);
+      if (m) {
+        html = `<span style="font-weight:500; color:var(--text)">${escHtml(m[1])}</span>`
+             + `<span style="color:var(--text-faint)"> — </span>`
+             + `<span style="color:var(--accent)">${escHtml(m[2])}</span>`;
+      } else {
+        html = `<span style="color:var(--accent)">${escHtml(msg.replace(/^Searching[\s—-]*/i, ''))}</span>`;
+      }
+    } else if (type === 'found') {
+      icon = '✓';
+      iconColor = 'var(--accent)';
+      html = `<span style="color:var(--text); font-weight:500;">${escHtml(msg)}</span>`;
+    } else {
+      html = `<span style="color:var(--text-muted)">${escHtml(msg)}</span>`;
+    }
+
+    entry.innerHTML = `<span style="flex-shrink:0; color:${iconColor};">${icon}</span>${html}`;
     logEl.prepend(entry);
   }
 
@@ -128,9 +186,15 @@ async function runScout() {
   btn.disabled = true;
   logEl.innerHTML = '';
   searches = 0;
+  startTime = Date.now();
   statusPanel.style.display = '';
-  searchCount.textContent = '0 searches';
+  searchCount.textContent = '0 searches · 0s';
   setProgress(4);
+
+  timerInterval = setInterval(() => {
+    searchCount.textContent = `${searches} search${searches !== 1 ? 'es' : ''} · ${elapsedStr()}`;
+  }, 1000);
+
   appendLog('Starting acquisition scout…', 'info');
 
   stateEl.innerHTML = `<div class="state-box"><p>Scout is searching…</p><small>Browsing BizBuySell, BizQuest, and BusinessBroker.net</small></div>`;
@@ -170,21 +234,32 @@ async function runScout() {
         const data = JSON.parse(dataMatch[1]);
 
         if (type === 'status') {
-          const isSearch = data.message.startsWith('Searching:');
-          appendLog(data.message, isSearch ? 'search' : 'info');
+          const isSearch = data.message.startsWith('Searching ');
+          const isFound = data.message.startsWith('Found ');
+          const msgType = isSearch ? 'search' : isFound ? 'found' : 'info';
+          appendLog(data.message, msgType);
           if (isSearch) {
             searches++;
-            searchCount.textContent = `${searches} search${searches !== 1 ? 'es' : ''}`;
+            searchCount.textContent = `${searches} search${searches !== 1 ? 'es' : ''} · ${elapsedStr()}`;
             setProgress(4 + (searches / EXPECTED_SEARCHES) * 84);
-          } else if (data.message.startsWith('Parsing')) {
-            setProgress(92);
+          } else if (data.message.startsWith('Compiling') || data.message.startsWith('Found ')) {
+            setProgress(94);
           }
         } else if (type === 'done') {
+          clearInterval(timerInterval);
           setProgress(100);
-          appendLog(`Done — ${data.listings.length} listings found`, 'info');
+          const total = data.listings.length;
+          const elapsed = elapsedStr();
+          appendLog(`Done — ${total} listing${total !== 1 ? 's' : ''} found in ${elapsed}`, 'info');
           currentListings = data.listings;
           localStorage.setItem('acq_listings', JSON.stringify({ listings: data.listings, updatedAt: data.updatedAt }));
-          // Small delay so user sees 100% before panel hides
+          // Animate the stat counter up
+          let n = 0;
+          const anim = setInterval(() => {
+            n = Math.min(n + 1, total);
+            document.getElementById('stat-total').textContent = n;
+            if (n >= total) clearInterval(anim);
+          }, 40);
           setTimeout(() => {
             statusPanel.style.display = 'none';
             renderListings(data.listings, data.updatedAt);
@@ -195,6 +270,7 @@ async function runScout() {
       }
     }
   } catch (e) {
+    clearInterval(timerInterval);
     stateEl.innerHTML = `<div class="state-box error-box"><p>Scout failed</p><small>${escHtml(e.message)}</small></div>`;
     stateEl.style.display = '';
     appendLog('Scout failed: ' + e.message, 'info');
@@ -231,9 +307,9 @@ function renderListings(listings, updatedAt) {
     const strengths = (l.strengths || []).map(s => `<span class="tag tag-strength">${escHtml(s)}</span>`).join('');
     const concerns = (l.concerns || []).map(c => `<span class="tag tag-concern">${escHtml(c)}</span>`).join('');
     const searchUrl = `https://www.bizbuysell.com/businesses-for-sale/?q=${encodeURIComponent(l.name + ' ' + (l.location || ''))}`;
-    const viewLink = l.url
+    const viewLink = isDirectListingUrl(l.url)
       ? `<a class="btn btn-sm" href="${escHtml(l.url)}" target="_blank" rel="noreferrer noopener">View listing →</a>`
-      : `<a class="btn btn-sm" href="${searchUrl}" target="_blank" rel="noreferrer noopener">Search BizBuySell →</a>`;
+      : `<a class="btn btn-sm" href="${escHtml(l.url || searchUrl)}" target="_blank" rel="noreferrer noopener">Search listing →</a>`;
     return `<div class="listing-card priority-${priorityClass}">
       <div class="listing-card-top">
         <div class="listing-card-meta">

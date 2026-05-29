@@ -1,5 +1,9 @@
 {
   "name": "acquisition-scout",
   "version": "1.0.0",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/server.test.js test/ui.test.js"
+  },
   "dependencies": {}
 }

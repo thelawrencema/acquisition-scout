@@ -48,7 +48,7 @@ function callAnthropic(body) {
         } catch (e) { reject(e); }
       });
     });
-    req.setTimeout(120000, () => { req.destroy(new Error('Anthropic API request timed out.')); });
+    req.setTimeout(300000, () => { req.destroy(new Error('Anthropic API request timed out.')); });
     req.on('error', reject);
     req.write(raw);
     req.end();
@@ -58,7 +58,10 @@ function callAnthropic(body) {
 function extractJsonArray(raw) {
   const start = raw.indexOf('[');
   const end = raw.lastIndexOf(']');
-  if (start === -1 || end === -1) throw new Error('No JSON array found in response.');
+  if (start === -1 || end === -1) {
+    const preview = raw.slice(0, 400).replace(/\n/g, ' ');
+    throw new Error(`No JSON array found in response. Model returned: "${preview}"`);
+  }
   let jsonStr = raw.slice(start, end + 1);
   try {
     return JSON.parse(jsonStr);
@@ -100,9 +103,33 @@ ${industrySearch}
 - "absentee business for sale Orange County bizquest"
 - "absentee business for sale Southern California businessbroker"
 
-IMPORTANT — asking price, revenue, and cash flow:
-Listing sites (BizBuySell, BizQuest, BusinessBroker) always display the asking price on the listing page. If a search snippet does not include the price, open the listing URL directly with another search or fetch the page to get the actual numbers. Only use "Not disclosed" if the listing page itself explicitly says the price is not disclosed or withheld by the seller. Never use "Not disclosed" simply because the snippet was missing the number.
+═══ RULE 1 — DIRECT LISTING URLs (REQUIRED) ═══
+The url field must link to the specific individual listing page, NOT a search results page or site directory.
 
+CORRECT URLs (specific listing pages):
+  https://www.bizbuysell.com/Business-Opportunity/some-business-name/1234567/
+  https://www.bizquest.com/business-for-sale/some-business/BQ1234567/
+  https://www.businessbroker.net/businessforsale/some-business-123456.aspx
+
+WRONG URLs (do not use — these are directory/search pages, not listings):
+  https://www.bizbuysell.com/california/orange-county-businesses-for-sale/
+  https://www.bizbuysell.com/businesses-for-sale/?q=cleaning
+  https://www.bizquest.com/business-for-sale/california/
+
+For every listing you include: extract the direct listing-page URL from the search result. If you only have a directory URL and not the specific listing URL, do a follow-up search for the business by name (e.g. "Acme Cleaning Service Brea CA bizbuysell") to locate and confirm the exact listing URL before including it.
+
+═══ RULE 2 — FINANCIAL DATA (NO LAZY "NOT DISCLOSED") ═══
+Use "Not disclosed" ONLY if the listing page itself explicitly states the seller has chosen not to disclose that figure.
+
+If a search snippet is missing the asking price, revenue, or cash flow:
+  1. Do NOT assume it's undisclosed — it almost certainly IS on the listing page
+  2. Search for the specific listing by name to open the actual listing page and read the numbers
+  3. BizBuySell and BizQuest always display Asking Price and Cash Flow on every listing page
+
+For any listing where your snippet is missing financials, run a targeted search such as:
+  "[Business name] [city] bizbuysell" → open the listing → read the numbers
+
+═══ OUTPUT FORMAT ═══
 After completing your searches, return ONLY a valid JSON array — no markdown, no explanation. Each element:
 {
   "name": "Business name or type",
@@ -112,7 +139,7 @@ After completing your searches, return ONLY a valid JSON array — no markdown, 
   "cashFlow": "$XXX,XXX or Not disclosed",
   "location": "City, CA",
   "description": "1-2 sentence description",
-  "url": "Direct URL to the listing",
+  "url": "Direct URL to this specific listing page (see Rule 1)",
   "score": 7,
   "priority": "contact now",
   "brokerNotes": "2-3 sentences: criteria fit, what stands out, what to verify first",
@@ -125,44 +152,97 @@ Sort by score descending. Include all listings found, even poor fits.
 IMPORTANT: All string values must be valid JSON — no unescaped quotes, backslashes, or newlines.`;
 }
 
+const HEARTBEAT_MSGS = [
+  'Still searching — this can take a couple of minutes…',
+  'Reviewing listing details across sites…',
+  'Cross-referencing BizBuySell, BizQuest, and BusinessBroker.net…',
+  'Gathering asking prices and cash-flow figures…',
+  'Verifying financials for candidate listings…',
+];
+
+function describeSearch(query) {
+  const siteMap = [
+    [/bizbuysell/i, 'BizBuySell'],
+    [/bizquest/i, 'BizQuest'],
+    [/businessbroker/i, 'BusinessBroker.net'],
+  ];
+  let site = null;
+  for (const [re, name] of siteMap) {
+    if (re.test(query)) { site = name; break; }
+  }
+  const clean = query
+    .replace(/bizbuysell\.com|bizbuysell|bizquest\.com|bizquest|businessbroker\.net|businessbroker/gi, '')
+    .replace(/["""]/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  return site ? { site, topic: clean } : { site: null, topic: query };
+}
+
 async function runScout(criteria, onStatus) {
   const tools = [{ type: 'web_search_20250305', name: 'web_search' }];
   const messages = [{ role: 'user', content: buildScoutPrompt(criteria) }];
 
-  onStatus('Starting acquisition scout…');
+  onStatus('Connecting to Claude — starting acquisition scout…');
 
   let iterations = 0;
+  let heartbeatIdx = 0;
   const MAX_ITERATIONS = 15;
 
   while (iterations < MAX_ITERATIONS) {
     iterations++;
 
-    const response = await callAnthropic({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 8192,
-      tools,
-      messages
-    });
+    if (iterations > 1) {
+      onStatus('Reviewing results, planning next searches…');
+    }
+
+    const heartbeat = setInterval(() => {
+      onStatus(HEARTBEAT_MSGS[heartbeatIdx % HEARTBEAT_MSGS.length]);
+      heartbeatIdx++;
+    }, 20000);
+
+    let response;
+    try {
+      response = await callAnthropic({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 8192,
+        tools,
+        messages
+      });
+    } finally {
+      clearInterval(heartbeat);
+    }
 
     const content = response.content || [];
 
     // Surface each web search query as a status update
-    content
-      .filter(b => b.type === 'tool_use' && b.name === 'web_search')
-      .forEach(b => onStatus(`Searching: "${b.input?.query}"`));
+    const searches = content.filter(b => b.type === 'tool_use' && b.name === 'web_search');
+    searches.forEach(b => {
+      const { site, topic } = describeSearch(b.input?.query || '');
+      onStatus(site ? `Searching ${site} — ${topic}` : `Searching — ${topic}`);
+    });
 
     if (response.stop_reason === 'end_turn') {
-      const text = content.find(b => b.type === 'text')?.text || '';
-      onStatus('Parsing listings…');
-      return extractJsonArray(text);
+      const text = content.filter(b => b.type === 'text').map(b => b.text).join('\n');
+      console.log('Scout end_turn text blocks:', content.filter(b => b.type === 'text').length, '— first 800:', text.slice(0, 800));
+      onStatus('Compiling and scoring listings…');
+      const listings = extractJsonArray(text);
+      onStatus(`Found ${listings.length} listing${listings.length !== 1 ? 's' : ''} — ranking by score…`);
+      return listings;
     }
 
     if (response.stop_reason === 'tool_use') {
-      messages.push({ role: 'assistant', content });
-      // Return tool_results to continue the loop; Anthropic executes web_search server-side
-      const toolResults = content
-        .filter(b => b.type === 'tool_use')
-        .map(b => ({ type: 'tool_result', tool_use_id: b.id, content: '' }));
+      // Assistant message must only contain text + tool_use blocks (not tool_result)
+      const assistantContent = content.filter(b => b.type === 'text' || b.type === 'tool_use');
+      messages.push({ role: 'assistant', content: assistantContent });
+
+      // Use server-provided tool_result blocks if present; otherwise acknowledge with empty content
+      const serverResults = content.filter(b => b.type === 'tool_result');
+      const toolResults = serverResults.length > 0
+        ? serverResults
+        : assistantContent
+            .filter(b => b.type === 'tool_use')
+            .map(b => ({ type: 'tool_result', tool_use_id: b.id, content: '' }));
+
       if (toolResults.length) {
         messages.push({ role: 'user', content: toolResults });
       } else {
@@ -267,7 +347,7 @@ function parseBody(req) {
   });
 }
 
-http.createServer(async (req, res) => {
+if (require.main === module) http.createServer(async (req, res) => {
   // Agentic scout via SSE
   if (req.method === 'POST' && req.url === '/api/scout') {
     const { criteria } = await parseBody(req);
@@ -334,3 +414,5 @@ http.createServer(async (req, res) => {
 }).listen(PORT, () => {
   console.log(`Acquisition Scout running at http://localhost:${PORT}`);
 });
+
+module.exports = { extractJsonArray, describeSearch, buildCriteriaBlock, preprocessPastedContent, buildScoutPrompt };
