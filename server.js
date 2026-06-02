@@ -90,7 +90,8 @@ function buildScoutPrompt(criteria) {
     ? `- "${criteria.industries} business for sale Southern California"`
     : '- "service business for sale Southern California bizbuysell"';
 
-  return `You are an expert SMB acquisition broker. Use web search to find business listings for sale that match the buyer criteria below. Search BizBuySell.com, BizQuest.com, and BusinessBroker.net. Perform several targeted searches to find 15-25 listings total across all three sites.
+  const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  return `You are an expert SMB acquisition broker. Today's date is ${today}. Use web search to find business listings for sale that match the buyer criteria below. Search BizBuySell.com, BizQuest.com, and BusinessBroker.net. Perform several targeted searches to find 15-25 listings total across all three sites.
 
 BUYER CRITERIA:
 ${buildCriteriaBlock(criteria)}
@@ -129,6 +130,13 @@ If a search snippet is missing the asking price, revenue, or cash flow:
 For any listing where your snippet is missing financials, run a targeted search such as:
   "[Business name] [city] bizbuysell" → open the listing → read the numbers
 
+═══ RULE 3 — ACTIVE LISTINGS ONLY ═══
+Only include listings that are currently active and available for sale as of ${today}.
+  - Before including a listing, confirm it is still listed (not marked "sold", "pending", or removed)
+  - If a listing page says "Business Sold", "Under Contract", or "No Longer Available", skip it
+  - Extract the listed date from the listing page if shown (e.g. "Listed: March 2025")
+  - Prefer recently listed businesses; flag anything listed more than 6 months ago in brokerNotes
+
 ═══ OUTPUT FORMAT ═══
 After completing your searches, return ONLY a valid JSON array — no markdown, no explanation. Each element:
 {
@@ -140,6 +148,7 @@ After completing your searches, return ONLY a valid JSON array — no markdown, 
   "location": "City, CA",
   "description": "1-2 sentence description",
   "url": "Direct URL to this specific listing page (see Rule 1)",
+  "listedDate": "Month YYYY or null if not shown",
   "score": 7,
   "priority": "contact now",
   "brokerNotes": "2-3 sentences: criteria fit, what stands out, what to verify first",
@@ -159,6 +168,123 @@ const HEARTBEAT_MSGS = [
   'Gathering asking prices and cash-flow figures…',
   'Verifying financials for candidate listings…',
 ];
+
+function checkUrlLive(url) {
+  return new Promise((resolve) => {
+    try {
+      const u = new URL(url);
+      const req = https.request({
+        hostname: u.hostname,
+        path: u.pathname + u.search,
+        method: 'HEAD',
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AcquisitionScout/1.0)' }
+      }, res => {
+        // 200–299 = active; 301/302 away from the same host likely = sold/removed
+        const ok = res.statusCode >= 200 && res.statusCode < 300;
+        const redirectedAway = (res.statusCode === 301 || res.statusCode === 302) &&
+          res.headers.location && !res.headers.location.includes(u.hostname);
+        res.resume();
+        resolve(redirectedAway ? 'removed' : ok ? 'active' : 'unknown');
+      });
+      req.setTimeout(6000, () => { req.destroy(); resolve('unknown'); });
+      req.on('error', () => resolve('unknown'));
+      req.end();
+    } catch { resolve('unknown'); }
+  });
+}
+
+async function verifyListingsLive(listings, onStatus) {
+  const withUrls = listings.filter(l => isDirectUrl(l.url));
+  if (!withUrls.length) return listings;
+
+  onStatus(`Checking ${withUrls.length} listing${withUrls.length !== 1 ? 's' : ''} are still active…`);
+
+  const statuses = await Promise.all(withUrls.map(l => checkUrlLive(l.url)));
+
+  const statusMap = new Map(withUrls.map((l, i) => [l.url, statuses[i]]));
+  const removed = statuses.filter(s => s === 'removed').length;
+  if (removed) onStatus(`Filtered out ${removed} listing${removed !== 1 ? 's' : ''} that appear sold or removed`);
+
+  return listings
+    .map(l => ({ ...l, urlStatus: statusMap.get(l.url) || 'unknown' }))
+    .filter(l => l.urlStatus !== 'removed');
+}
+
+// Mirror of isDirectListingUrl from public/app.js — keep in sync
+function isDirectUrl(url) {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    const host = u.hostname.replace('www.', '');
+    if (host === 'bizbuysell.com')
+      return /\/Business-Opportunity\//i.test(url) || /\/\d{5,}\/?$/.test(u.pathname);
+    if (host === 'bizquest.com')
+      return /BQ\d+/i.test(url);
+    if (host === 'businessbroker.net')
+      return /\/businessforsale\/.+\d/i.test(url) || /\.aspx/i.test(url);
+    return true; // trust other domains (individual broker sites)
+  } catch { return false; }
+}
+
+async function lookupMissingUrls(listings, onStatus) {
+  const needsFix = listings.filter(l => !isDirectUrl(l.url));
+  if (!needsFix.length) return listings;
+
+  onStatus(`Finding direct links for ${needsFix.length} listing${needsFix.length !== 1 ? 's' : ''}…`);
+
+  const list = needsFix
+    .map((l, i) => `${i + 1}. "${l.name}" — ${l.location || 'SoCal'}`)
+    .join('\n');
+
+  const prompt = `Use web search to find the direct listing page URL on BizBuySell, BizQuest, or BusinessBroker.net for each business below. Search for each one by name and location.
+
+${list}
+
+Return ONLY a JSON array — no explanation, no markdown:
+[{"name": "business name exactly as given", "url": "https://direct-listing-page-url"}]
+
+Rules:
+- The URL must be a specific listing page (e.g. bizbuysell.com/Business-Opportunity/name/123456/ or bizquest.com/business-for-sale/name/BQ123456/)
+- Omit any entry where you cannot find the specific listing page
+- Never include directory, search-result, or category URLs`;
+
+  try {
+    const heartbeat = setInterval(() => onStatus('Still finding direct links…'), 15000);
+    let response;
+    try {
+      response = await callAnthropic({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2048,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        messages: [{ role: 'user', content: prompt }]
+      });
+    } finally {
+      clearInterval(heartbeat);
+    }
+
+    const text = (response.content || [])
+      .filter(b => b.type === 'text').map(b => b.text).join('\n');
+
+    const fixes = extractJsonArray(text);
+    const fixMap = new Map(
+      fixes
+        .filter(f => isDirectUrl(f.url))
+        .map(f => [f.name.toLowerCase().trim(), f.url])
+    );
+
+    const fixed = listings.map(l => {
+      const url = fixMap.get(l.name.toLowerCase().trim());
+      return url ? { ...l, url } : l;
+    });
+
+    const count = fixed.filter((l, i) => l.url !== listings[i].url).length;
+    if (count) onStatus(`Resolved ${count} direct link${count !== 1 ? 's' : ''}…`);
+    return fixed;
+  } catch (e) {
+    console.warn('URL lookup step failed (non-fatal):', e.message);
+    return listings;
+  }
+}
 
 function describeSearch(query) {
   const siteMap = [
@@ -226,8 +352,10 @@ async function runScout(criteria, onStatus) {
       console.log('Scout end_turn text blocks:', content.filter(b => b.type === 'text').length, '— first 800:', text.slice(0, 800));
       onStatus('Compiling and scoring listings…');
       const listings = extractJsonArray(text);
-      onStatus(`Found ${listings.length} listing${listings.length !== 1 ? 's' : ''} — ranking by score…`);
-      return listings;
+      const withUrls = await lookupMissingUrls(listings, onStatus);
+      const verified = await verifyListingsLive(withUrls, onStatus);
+      onStatus(`Found ${verified.length} listing${verified.length !== 1 ? 's' : ''} — ranking by score…`);
+      return verified;
     }
 
     if (response.stop_reason === 'tool_use') {

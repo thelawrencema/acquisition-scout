@@ -307,15 +307,15 @@ function renderListings(listings, updatedAt) {
     const strengths = (l.strengths || []).map(s => `<span class="tag tag-strength">${escHtml(s)}</span>`).join('');
     const concerns = (l.concerns || []).map(c => `<span class="tag tag-concern">${escHtml(c)}</span>`).join('');
     const searchUrl = `https://www.bizbuysell.com/businesses-for-sale/?q=${encodeURIComponent(l.name + ' ' + (l.location || ''))}`;
-    const viewLink = isDirectListingUrl(l.url)
+    const viewLink = l.url
       ? `<a class="btn btn-sm" href="${escHtml(l.url)}" target="_blank" rel="noreferrer noopener">View listing →</a>`
-      : `<a class="btn btn-sm" href="${escHtml(l.url || searchUrl)}" target="_blank" rel="noreferrer noopener">Search listing →</a>`;
+      : `<a class="btn btn-sm" href="${escHtml(searchUrl)}" target="_blank" rel="noreferrer noopener">Search listing →</a>`;
     return `<div class="listing-card priority-${priorityClass}">
       <div class="listing-card-top">
         <div class="listing-card-meta">
           <span class="priority-badge ${priorityClass}">${priorityLabel}</span>
           <div class="listing-name">${escHtml(l.name)}</div>
-          <div class="listing-type-loc">${escHtml(l.type)}${l.location ? ' · ' + escHtml(l.location) : ''}</div>
+          <div class="listing-type-loc">${escHtml(l.type)}${l.location ? ' · ' + escHtml(l.location) : ''}${l.listedDate ? ' · Listed ' + escHtml(l.listedDate) : ''}</div>
         </div>
         <div class="score-block">
           <div class="score-num">${l.score}<span class="score-denom">/10</span></div>
