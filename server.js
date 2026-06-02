@@ -35,6 +35,7 @@ function callAnthropic(body) {
         'Content-Type': 'application/json',
         'x-api-key': API_KEY,
         'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'output-128k-2025-02-19',
         'Content-Length': Buffer.byteLength(raw)
       }
     }, (res) => {
@@ -330,7 +331,7 @@ async function runScout(criteria, onStatus) {
     try {
       response = await callAnthropic({
         model: 'claude-sonnet-4-6',
-        max_tokens: 8192,
+        max_tokens: 16000,
         tools,
         messages
       });
@@ -380,11 +381,14 @@ async function runScout(criteria, onStatus) {
     }
 
     if (response.stop_reason === 'max_tokens') {
-      // Model ran out of tokens mid-response — try to salvage partial JSON
-      const text = content.find(b => b.type === 'text')?.text || '';
+      const text = content.filter(b => b.type === 'text').map(b => b.text).join('\n');
       if (text.includes('[')) {
-        onStatus('Parsing partial results…');
-        return extractJsonArray(text);
+        onStatus('Response was cut off — salvaging partial results…');
+        const listings = extractJsonArray(text);
+        const withUrls = await lookupMissingUrls(listings, onStatus);
+        const verified = await verifyListingsLive(withUrls, onStatus);
+        onStatus(`Found ${verified.length} listing${verified.length !== 1 ? 's' : ''} — ranking by score…`);
+        return verified;
       }
       throw new Error('Scout response was cut off before any listings were returned. Try again.');
     }
